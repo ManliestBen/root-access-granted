@@ -138,7 +138,10 @@ export function toCreationOptions(serverOptions: RegisterOptions): CredentialCre
         displayName: user.displayName ?? user.display_name ?? user.name,
       },
       challenge: base64urlToBuffer(serverOptions.challenge),
-      pubKeyCredParams: serverOptions.pubKeyCredParams,
+      pubKeyCredParams: serverOptions.pubKeyCredParams.map((p) => ({
+        type: "public-key" as const,
+        alg: p.alg,
+      })),
       timeout: serverOptions.timeout,
       authenticatorSelection: serverOptions.authenticatorSelection,
     },

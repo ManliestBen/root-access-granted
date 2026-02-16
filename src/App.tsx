@@ -6,8 +6,6 @@ import {
   fetchWithAuth,
   type ScheduleRule,
   type ScheduleRuleCreate,
-  type LightRule,
-  type PumpRule,
 } from "./api/client";
 import LoginView from "./LoginView";
 import AuthImg from "./AuthImg";
@@ -17,16 +15,6 @@ const AUTH_STORAGE_KEY = "gardyn_token";
 
 /** All schedule times are in Central Time (device time on the Pi). */
 const CENTRAL_TZ = "America/Chicago";
-
-function formatTimeCentral(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    timeZone: CENTRAL_TZ,
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-}
 
 function formatTimeCentralShort(date: Date): string {
   return date.toLocaleTimeString("en-US", {
