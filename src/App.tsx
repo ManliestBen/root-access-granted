@@ -10,6 +10,7 @@ import {
 } from "./api/client";
 import LoginView from "./LoginView";
 import AuthImg from "./AuthImg";
+import { RadialGauge } from "./RadialGauge";
 import "./App.css";
 
 const AUTH_STORAGE_KEY = "gardyn_token";
@@ -81,7 +82,7 @@ function App() {
     pumpStats: null,
   });
   const [lightBrightnessSlider, setLightBrightnessSlider] = useState(50);
-  const [pumpSpeedSlider, setPumpSpeedSlider] = useState(50);
+  const [pumpSpeedSlider, setPumpSpeedSlider] = useState(100);
   const [cameraUpperError, setCameraUpperError] = useState<string | null>(null);
   const [cameraLowerError, setCameraLowerError] = useState<string | null>(null);
   const [cameraPhotos, setCameraPhotos] = useState<{ filename: string; url: string }[]>([]);
@@ -94,6 +95,7 @@ function App() {
   const [currentTimeCentral, setCurrentTimeCentral] = useState<string>("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsForm, setSettingsForm] = useState<AppSettings | null>(null);
+  const [dashboardSettings, setDashboardSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [scheduleForm, setScheduleForm] = useState<{
@@ -211,6 +213,11 @@ function App() {
     return () => clearInterval(t);
   }, [token, fetchAll]);
 
+  useEffect(() => {
+    if (!token) return;
+    api.getSettings().then(setDashboardSettings).catch(() => {});
+  }, [token]);
+
   const handleLightOn = async () => {
     try {
       await api.lightOn();
@@ -241,7 +248,9 @@ function App() {
 
   const handlePumpOn = async () => {
     try {
+      await api.setPumpSpeed(100);
       await api.pumpOn();
+      setPumpSpeedSlider(100);
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pump on failed");
@@ -399,7 +408,8 @@ function App() {
     if (!settingsForm) return;
     setSettingsError(null);
     try {
-      await api.updateSettings(settingsForm);
+      const updated = await api.updateSettings(settingsForm);
+      setDashboardSettings(updated);
       closeSettingsModal();
     } catch (e) {
       setSettingsError(e instanceof Error ? e.message : "Failed to save settings");
@@ -559,56 +569,58 @@ function App() {
         </button>
       </div>
 
-      <div className="grid">
-        <div className="card">
-          <h3>Water level (distance)</h3>
-          {state.distance != null ? (
-            <>
-              <span className="value">{state.distance}</span>
-              <span className="unit">cm</span>
-              <p className="hint">
-                Sensor to surface. Higher = emptier tank (DYP-A01-V2.0, in cm).
-              </p>
-            </>
-          ) : (
-            <span className="loading">—</span>
-          )}
+      <div className="grid grid-gauges">
+        <div className="card card-gauge">
+          <h3>Water level</h3>
+          <RadialGauge
+            value={state.distance}
+            min={dashboardSettings?.water_level_max ?? 8.5}
+            max={dashboardSettings?.water_level_min ?? 13}
+            unit="cm"
+            label="Water level"
+            invertScale
+            lowAlert={dashboardSettings?.water_alert_threshold}
+            formatValue={(n) => String(Math.round(n * 10) / 10)}
+          />
         </div>
 
-        <div className="card">
+        <div className="card card-gauge">
           <h3>Humidity</h3>
-          {state.humidity != null ? (
-            <>
-              <span className="value">{state.humidity}</span>
-              <span className="unit">%</span>
-            </>
-          ) : (
-            <span className="loading">—</span>
-          )}
+          <RadialGauge
+            value={state.humidity}
+            min={dashboardSettings?.humidity_min ?? 0}
+            max={dashboardSettings?.humidity_max ?? 100}
+            unit="%"
+            label="Humidity"
+            lowAlert={dashboardSettings?.humidity_low_alert_threshold}
+            highAlert={dashboardSettings?.humidity_high_alert_threshold}
+            formatValue={(n) => String(Math.round(n))}
+          />
         </div>
 
-        <div className="card">
+        <div className="card card-gauge">
           <h3>Air temperature</h3>
-          {state.temperature != null ? (
-            <>
-              <span className="value">{celsiusToF(state.temperature)}</span>
-              <span className="unit">°F</span>
-            </>
-          ) : (
-            <span className="loading">—</span>
-          )}
+          <RadialGauge
+            value={state.temperature != null ? celsiusToF(state.temperature) : null}
+            min={dashboardSettings?.air_temp_min ?? 32}
+            max={dashboardSettings?.air_temp_max ?? 100}
+            unit="°F"
+            label="Air temperature"
+            lowAlert={dashboardSettings?.air_temp_low_alert_threshold}
+            highAlert={dashboardSettings?.air_temp_high_alert_threshold}
+          />
         </div>
 
-        <div className="card">
+        <div className="card card-gauge">
           <h3>PCB temperature</h3>
-          {state.pcbTemp != null ? (
-            <>
-              <span className="value">{celsiusToF(state.pcbTemp)}</span>
-              <span className="unit">°F</span>
-            </>
-          ) : (
-            <span className="loading">—</span>
-          )}
+          <RadialGauge
+            value={state.pcbTemp != null ? celsiusToF(state.pcbTemp) : null}
+            min={dashboardSettings?.pcb_temp_min ?? 75}
+            max={dashboardSettings?.pcb_temp_max ?? 130}
+            unit="°F"
+            label="PCB temperature"
+            highAlert={dashboardSettings?.pcb_temp_alert_threshold}
+          />
         </div>
 
         <div className="controls-row">
@@ -668,19 +680,6 @@ function App() {
                   Off
                 </button>
               </div>
-              <div className="slider-row">
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={pumpSpeedSlider}
-                  onChange={(e) => handlePumpSpeed(Number(e.target.value))}
-                />
-                <span>{pumpSpeedSlider}%</span>
-              </div>
-              {state.pumpSpeed != null && (
-                <p className="hint">Current speed: {state.pumpSpeed}%</p>
-              )}
               {state.pumpStats?.power != null && (
                 <p className="hint">Power: {state.pumpStats.power} W</p>
               )}
@@ -1036,90 +1035,112 @@ function App() {
             {settingsError && <p className="hint" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{settingsError}</p>}
             {settingsForm && !settingsLoading && (
               <div className="settings-form">
+                <div className="settings-form-grid">
                 <section className="settings-section">
-                  <h4>Water level (cm)</h4>
-                  <div className="settings-form-row">
-                    <label>Min</label>
-                    <input type="number" step="any" value={settingsForm.water_level_min} onChange={(e) => setSettingsForm((f) => f && { ...f, water_level_min: Number(e.target.value) || 0 })} />
+                  <div className="settings-section-header">
+                    <h4>Water level (cm)</h4>
+                    <label className="settings-enable-alerts">
+                      <input type="checkbox" id="water_level_alerts" checked={settingsForm.water_level_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, water_level_alerts_enabled: e.target.checked })} />
+                      Enable alerts
+                    </label>
+                  </div>
+                  <div className="settings-form-row-duo">
+                    <div className="settings-field">
+                      <label>Min</label>
+                      <input type="number" step="any" value={settingsForm.water_level_min} onChange={(e) => setSettingsForm((f) => f && { ...f, water_level_min: Number(e.target.value) || 0 })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>Max</label>
+                      <input type="number" step="any" value={settingsForm.water_level_max} onChange={(e) => setSettingsForm((f) => f && { ...f, water_level_max: Number(e.target.value) || 0 })} />
+                    </div>
                   </div>
                   <div className="settings-form-row">
-                    <label>Max</label>
-                    <input type="number" step="any" value={settingsForm.water_level_max} onChange={(e) => setSettingsForm((f) => f && { ...f, water_level_max: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row">
-                    <label>Alert threshold</label>
+                    <label>Low alert</label>
                     <input type="number" step="any" value={settingsForm.water_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, water_alert_threshold: Number(e.target.value) || 0 })} />
                   </div>
-                  <div className="settings-form-row settings-form-check">
-                    <input type="checkbox" id="water_level_alerts" checked={settingsForm.water_level_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, water_level_alerts_enabled: e.target.checked })} />
-                    <label htmlFor="water_level_alerts">Water level alerts enabled</label>
+                </section>
+                <section className="settings-section">
+                  <div className="settings-section-header">
+                    <h4>Air temperature (°F)</h4>
+                    <label className="settings-enable-alerts">
+                      <input type="checkbox" id="air_temp_alerts" checked={settingsForm.air_temp_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_alerts_enabled: e.target.checked })} />
+                      Enable alerts
+                    </label>
+                  </div>
+                  <div className="settings-form-row-duo">
+                    <div className="settings-field">
+                      <label>Min</label>
+                      <input type="number" step="any" value={settingsForm.air_temp_min} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_min: Number(e.target.value) || 0 })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>Max</label>
+                      <input type="number" step="any" value={settingsForm.air_temp_max} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_max: Number(e.target.value) || 0 })} />
+                    </div>
+                  </div>
+                  <div className="settings-form-row-duo">
+                    <div className="settings-field">
+                      <label>High alert</label>
+                      <input type="number" step="any" value={settingsForm.air_temp_high_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_high_alert_threshold: Number(e.target.value) || 0 })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>Low alert</label>
+                      <input type="number" step="any" value={settingsForm.air_temp_low_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_low_alert_threshold: Number(e.target.value) || 0 })} />
+                    </div>
                   </div>
                 </section>
                 <section className="settings-section">
-                  <h4>Air temperature (°F)</h4>
-                  <div className="settings-form-row">
-                    <label>Min</label>
-                    <input type="number" step="any" value={settingsForm.air_temp_min} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_min: Number(e.target.value) || 0 })} />
+                  <div className="settings-section-header">
+                    <h4>Humidity (%)</h4>
+                    <label className="settings-enable-alerts">
+                      <input type="checkbox" id="humidity_alerts" checked={settingsForm.humidity_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_alerts_enabled: e.target.checked })} />
+                      Enable alerts
+                    </label>
                   </div>
-                  <div className="settings-form-row">
-                    <label>Max</label>
-                    <input type="number" step="any" value={settingsForm.air_temp_max} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_max: Number(e.target.value) || 0 })} />
+                  <div className="settings-form-row-duo">
+                    <div className="settings-field">
+                      <label>Min</label>
+                      <input type="number" step="any" value={settingsForm.humidity_min} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_min: Number(e.target.value) || 0 })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>Max</label>
+                      <input type="number" step="any" value={settingsForm.humidity_max} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_max: Number(e.target.value) || 0 })} />
+                    </div>
                   </div>
-                  <div className="settings-form-row">
-                    <label>High alert threshold</label>
-                    <input type="number" step="any" value={settingsForm.air_temp_high_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_high_alert_threshold: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row">
-                    <label>Low alert threshold</label>
-                    <input type="number" step="any" value={settingsForm.air_temp_low_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_low_alert_threshold: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row settings-form-check">
-                    <input type="checkbox" id="air_temp_alerts" checked={settingsForm.air_temp_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, air_temp_alerts_enabled: e.target.checked })} />
-                    <label htmlFor="air_temp_alerts">Air temp alerts enabled</label>
-                  </div>
-                </section>
-                <section className="settings-section">
-                  <h4>Humidity (%)</h4>
-                  <div className="settings-form-row">
-                    <label>Min</label>
-                    <input type="number" step="any" value={settingsForm.humidity_min} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_min: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row">
-                    <label>Max</label>
-                    <input type="number" step="any" value={settingsForm.humidity_max} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_max: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row">
-                    <label>Low alert threshold</label>
-                    <input type="number" step="any" value={settingsForm.humidity_low_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_low_alert_threshold: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row">
-                    <label>High alert threshold</label>
-                    <input type="number" step="any" value={settingsForm.humidity_high_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_high_alert_threshold: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row settings-form-check">
-                    <input type="checkbox" id="humidity_alerts" checked={settingsForm.humidity_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_alerts_enabled: e.target.checked })} />
-                    <label htmlFor="humidity_alerts">Humidity alerts enabled</label>
+                  <div className="settings-form-row-duo">
+                    <div className="settings-field">
+                      <label>Low alert</label>
+                      <input type="number" step="any" value={settingsForm.humidity_low_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_low_alert_threshold: Number(e.target.value) || 0 })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>High alert</label>
+                      <input type="number" step="any" value={settingsForm.humidity_high_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, humidity_high_alert_threshold: Number(e.target.value) || 0 })} />
+                    </div>
                   </div>
                 </section>
                 <section className="settings-section">
-                  <h4>PCB temperature (°F)</h4>
-                  <div className="settings-form-row">
-                    <label>Min</label>
-                    <input type="number" step="any" value={settingsForm.pcb_temp_min} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_min: Number(e.target.value) || 0 })} />
+                  <div className="settings-section-header">
+                    <h4>PCB temperature (°F)</h4>
+                    <label className="settings-enable-alerts">
+                      <input type="checkbox" id="pcb_temp_alerts" checked={settingsForm.pcb_temp_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_alerts_enabled: e.target.checked })} />
+                      Enable alerts
+                    </label>
+                  </div>
+                  <div className="settings-form-row-duo">
+                    <div className="settings-field">
+                      <label>Min</label>
+                      <input type="number" step="any" value={settingsForm.pcb_temp_min} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_min: Number(e.target.value) || 0 })} />
+                    </div>
+                    <div className="settings-field">
+                      <label>Max</label>
+                      <input type="number" step="any" value={settingsForm.pcb_temp_max} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_max: Number(e.target.value) || 0 })} />
+                    </div>
                   </div>
                   <div className="settings-form-row">
-                    <label>Max</label>
-                    <input type="number" step="any" value={settingsForm.pcb_temp_max} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_max: Number(e.target.value) || 0 })} />
-                  </div>
-                  <div className="settings-form-row">
-                    <label>Alert threshold</label>
+                    <label>High alert</label>
                     <input type="number" step="any" value={settingsForm.pcb_temp_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_alert_threshold: Number(e.target.value) || 0 })} />
                   </div>
-                  <div className="settings-form-row settings-form-check">
-                    <input type="checkbox" id="pcb_temp_alerts" checked={settingsForm.pcb_temp_alerts_enabled} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_alerts_enabled: e.target.checked })} />
-                    <label htmlFor="pcb_temp_alerts">PCB temp alerts enabled</label>
-                  </div>
                 </section>
+                </div>
                 <div className="settings-form-actions">
                   <button type="button" className="schedule-save-btn" onClick={saveSettings}>Save</button>
                   <button type="button" className="schedule-cancel-btn" onClick={closeSettingsModal}>Cancel</button>
