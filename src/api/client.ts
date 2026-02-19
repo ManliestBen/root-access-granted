@@ -90,6 +90,10 @@ export type AppSettings = {
   humidity_alerts_enabled: boolean;
   air_temp_alerts_enabled: boolean;
   pcb_temp_alerts_enabled: boolean;
+  slack_webhook_url: string | null;
+  slack_cooldown_minutes: number;
+  slack_notifications_enabled: boolean;
+  slack_runtime_errors_enabled: boolean;
 };
 
 export const api = {
@@ -199,6 +203,12 @@ export const api = {
     request<AppSettings>("/settings", {
       method: "PUT",
       body: JSON.stringify(settings),
+    }),
+  /** Send a test Slack message. Optional webhook_url in body to test before saving. */
+  testSlack: (webhookUrl?: string | null) =>
+    request<{ message?: string }>("/settings/test-slack", {
+      method: "POST",
+      body: JSON.stringify(webhookUrl ? { webhook_url: webhookUrl } : {}),
     }),
 };
 
