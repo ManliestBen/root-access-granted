@@ -71,6 +71,27 @@ function num(v: unknown): number | null {
   return null;
 }
 
+export type AppSettings = {
+  water_level_min: number;
+  water_level_max: number;
+  water_alert_threshold: number;
+  air_temp_min: number;
+  air_temp_max: number;
+  air_temp_high_alert_threshold: number;
+  air_temp_low_alert_threshold: number;
+  humidity_min: number;
+  humidity_max: number;
+  humidity_low_alert_threshold: number;
+  humidity_high_alert_threshold: number;
+  pcb_temp_min: number;
+  pcb_temp_max: number;
+  pcb_temp_alert_threshold: number;
+  water_level_alerts_enabled: boolean;
+  humidity_alerts_enabled: boolean;
+  air_temp_alerts_enabled: boolean;
+  pcb_temp_alerts_enabled: boolean;
+};
+
 export const api = {
   getDistance: () => request<{ distance: number }>("/distance"),
   getHumidity: () => request<{ humidity?: string | number }>("/humidity").then((r) => ({ humidity: num(r.humidity) })),
@@ -142,6 +163,14 @@ export const api = {
     }),
   deleteRule: (id: string) =>
     request<void>(`/schedule/rules/${id}`, { method: "DELETE" }),
+
+  // App settings (gauge/alert thresholds and alert toggles)
+  getSettings: () => request<AppSettings>("/settings"),
+  updateSettings: (settings: Partial<AppSettings>) =>
+    request<AppSettings>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
 };
 
 export type LightRule = {
