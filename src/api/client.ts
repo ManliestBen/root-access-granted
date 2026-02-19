@@ -94,6 +94,7 @@ export type AppSettings = {
   slack_cooldown_minutes: number;
   slack_notifications_enabled: boolean;
   slack_runtime_errors_enabled: boolean;
+  plant_of_the_day_slack_time: string;
 };
 
 export const api = {
@@ -210,6 +211,41 @@ export const api = {
       method: "POST",
       body: JSON.stringify(webhookUrl ? { webhook_url: webhookUrl } : {}),
     }),
+
+  /** Plant of the day (Perenual API). 404 if none set. */
+  getPlantOfTheDay: () =>
+    request<PlantOfTheDay>("/plant-of-the-day"),
+};
+
+export type PlantOfTheDay = {
+  id?: number;
+  common_name?: string;
+  genus?: string;
+  species_epithet?: string;
+  /** Server-computed Wikipedia URL (genus + epithet); use this when present. */
+  wikipedia_url?: string;
+  scientific_name?: string[];
+  description?: string;
+  type?: string;
+  cycle?: string;
+  watering?: string;
+  watering_general_benchmark?: { value?: string; unit?: string };
+  sunlight?: string[];
+  propagation?: string[];
+  hardiness?: { min?: string; max?: string };
+  origin?: string[];
+  dimensions?: { min_value?: number; max_value?: number; unit?: string }[];
+  maintenance?: string;
+  care_level?: string;
+  growth_rate?: string;
+  default_image?: {
+    thumbnail?: string;
+    small_url?: string;
+    regular_url?: string;
+    medium_url?: string;
+    original_url?: string;
+  };
+  care_guides?: string;
 };
 
 export type LightRule = {
