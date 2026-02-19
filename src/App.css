@@ -1085,6 +1085,13 @@ header .badge {
   margin-bottom: 0;
 }
 
+.history-metrics-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+
 /* Login view */
 .login-view {
   display: flex;

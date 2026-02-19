@@ -8,10 +8,24 @@ import {
   type ScheduleRuleCreate,
   type AppSettings,
   type PlantOfTheDay,
+  type HistoryRange,
+  type HistoryReadingPoint,
+  type PumpEventRecord,
 } from "./api/client";
 import LoginView from "./LoginView";
 import AuthImg from "./AuthImg";
 import { RadialGauge } from "./RadialGauge";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts";
 import "./App.css";
 
 const AUTH_STORAGE_KEY = "gardyn_token";
@@ -196,6 +210,14 @@ function App() {
   }>({ open: false, type: "light", pausedUntil: "" });
   const pendingResumeActionRef = useRef<(() => void) | null>(null);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyMetrics, setHistoryMetrics] = useState<Set<string>>(new Set(["water_level", "humidity"]));
+  const [historyRange, setHistoryRange] = useState<HistoryRange>("week");
+  const [historyData, setHistoryData] = useState<HistoryReadingPoint[]>([]);
+  const [historyPumpEvents, setHistoryPumpEvents] = useState<PumpEventRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
   const [scheduleForm, setScheduleForm] = useState<{
     open: boolean;
     editingId: string | null;
@@ -312,6 +334,52 @@ function App() {
     if (!token) return;
     api.getPlantOfTheDay().then(setPlantOfTheDay).catch(() => setPlantOfTheDay(null));
   }, [token]);
+
+  useEffect(() => {
+    if (!historyOpen || !token) return;
+    const metrics = Array.from(historyMetrics);
+    if (metrics.length === 0) {
+      setHistoryData([]);
+      setHistoryError("Select at least one metric.");
+      return;
+    }
+    setHistoryError(null);
+    setHistoryLoading(true);
+    Promise.all([
+      api.getHistoryReadings(metrics, historyRange),
+      api.getHistoryPumpEvents(historyRange),
+    ])
+      .then(([readingsRes, eventsRes]) => {
+        setHistoryData(readingsRes.data);
+        setHistoryPumpEvents(eventsRes.events);
+      })
+      .catch((e) => setHistoryError(e instanceof Error ? e.message : "Failed to load history"))
+      .finally(() => setHistoryLoading(false));
+  }, [historyOpen, token, historyRange, historyMetrics]);
+
+  const toggleHistoryMetric = (metric: string) => {
+    setHistoryMetrics((prev) => {
+      const next = new Set(prev);
+      if (next.has(metric)) next.delete(metric);
+      else next.add(metric);
+      return next;
+    });
+  };
+
+  const HISTORY_METRIC_LABELS: Record<string, string> = {
+    water_level: "Water level (cm)",
+    humidity: "Humidity (%)",
+    air_temp: "Air temp (°F)",
+    pcb_temp: "PCB temp (°F)",
+    light_percentage: "Light (%)",
+  };
+  const HISTORY_METRIC_COLORS: Record<string, string> = {
+    water_level: "#22c55e",
+    humidity: "#3b82f6",
+    air_temp: "#f59e0b",
+    pcb_temp: "#ef4444",
+    light_percentage: "#8b5cf6",
+  };
 
   const handleLightOn = async () => {
     const effectiveBrightness = getEffectiveLightBrightnessFromRules(rules);
@@ -759,6 +827,9 @@ function App() {
       <div className="refresh-row">
         <button type="button" onClick={fetchAll}>
           Refresh
+        </button>
+        <button type="button" onClick={() => setHistoryOpen(true)}>
+          History
         </button>
         <button type="button" onClick={openSettingsModal}>
           Settings
@@ -1460,6 +1531,132 @@ function App() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setHistoryOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="history-modal-title"
+        >
+          <div className="settings-modal history-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", width: "800px" }}>
+            <h2 id="history-modal-title">History</h2>
+            <p className="hint" style={{ marginBottom: "0.75rem", fontSize: "0.8rem" }}>
+              Select metrics and time range. Sensor data is recorded every 5 minutes. Pump on/off events are shown as vertical lines.
+            </p>
+            <div className="schedule-form">
+              <div className="schedule-form-row">
+                <label>Metrics</label>
+                <div className="history-metrics-wrap">
+                  {Object.entries(HISTORY_METRIC_LABELS).map(([key, label]) => (
+                    <label key={key} className="schedule-form-check">
+                      <input
+                        type="checkbox"
+                        checked={historyMetrics.has(key)}
+                        onChange={() => toggleHistoryMetric(key)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="schedule-form-row">
+                <label>Time range</label>
+                <select
+                  value={historyRange}
+                  onChange={(e) => setHistoryRange(e.target.value as HistoryRange)}
+                  aria-label="Time range"
+                >
+                  <option value="day">Day</option>
+                  <option value="week">Week</option>
+                  <option value="month">Month</option>
+                  <option value="year">Year</option>
+                </select>
+              </div>
+            </div>
+            {historyLoading && <p className="loading">Loading history…</p>}
+            {historyError && <p className="hint" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{historyError}</p>}
+            {!historyLoading && !historyError && historyData.length > 0 && (
+              <div style={{ width: "100%", height: "320px", marginBottom: "1rem" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={historyData.map((p) => ({
+                      ...p,
+                      air_temp: p.air_temp != null ? celsiusToF(p.air_temp) : undefined,
+                      pcb_temp: p.pcb_temp != null ? celsiusToF(p.pcb_temp) : undefined,
+                    }))}
+                    margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #333)" />
+                    <XAxis
+                      dataKey="created_at"
+                      tick={{ fontSize: 10, fill: "var(--text-muted, #888)" }}
+                      tickFormatter={(v) => {
+                        try {
+                          const d = new Date(v);
+                          if (historyRange === "day") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+                          if (historyRange === "week" || historyRange === "month") return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+                          return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                        } catch {
+                          return v;
+                        }
+                      }}
+                    />
+                    <YAxis tick={{ fontSize: 10, fill: "var(--text-muted, #888)" }} />
+                    <Tooltip
+                      contentStyle={{ background: "var(--card-bg, #1a1a1a)", border: "1px solid var(--border, #333)" }}
+                      labelStyle={{ color: "var(--text-muted)" }}
+                      labelFormatter={(v) => new Date(v).toLocaleString()}
+                    />
+                    <Legend />
+                    {Array.from(historyMetrics).map((metric) => (
+                      <Line
+                        key={metric}
+                        type="monotone"
+                        dataKey={metric}
+                        name={HISTORY_METRIC_LABELS[metric] ?? metric}
+                        stroke={HISTORY_METRIC_COLORS[metric] ?? "#888"}
+                        dot={false}
+                        strokeWidth={2}
+                        connectNulls
+                      />
+                    ))}
+                    {historyPumpEvents
+                      .filter((e) => e.is_on)
+                      .map((evt, i) => (
+                        <ReferenceLine
+                          key={`on-${i}-${evt.created_at}`}
+                          x={evt.created_at}
+                          stroke="var(--success, #22c55e)"
+                          strokeDasharray="2 2"
+                        />
+                      ))}
+                    {historyPumpEvents
+                      .filter((e) => !e.is_on)
+                      .map((evt, i) => (
+                        <ReferenceLine
+                          key={`off-${i}-${evt.created_at}`}
+                          x={evt.created_at}
+                          stroke="var(--danger, #ef4444)"
+                          strokeDasharray="2 2"
+                        />
+                      ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            {!historyLoading && !historyError && historyData.length === 0 && historyMetrics.size > 0 && (
+              <p className="hint">No data for the selected range. Data is recorded every 5 minutes.</p>
+            )}
+            <div className="schedule-form-actions">
+              <button type="button" className="schedule-cancel-btn" onClick={() => setHistoryOpen(false)}>
+                Close
+              </button>
             </div>
           </div>
         </div>
