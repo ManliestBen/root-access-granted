@@ -215,6 +215,35 @@ export const api = {
   /** Plant of the day (Perenual API). 404 if none set. */
   getPlantOfTheDay: () =>
     request<PlantOfTheDay>("/plant-of-the-day"),
+
+  /** Historical sensor readings. range: day | week | month | year */
+  getHistoryReadings: (metrics: string[], range: HistoryRange) =>
+    request<{ data: HistoryReadingPoint[] }>(
+      `/history/readings?metrics=${encodeURIComponent(metrics.join(","))}&range=${encodeURIComponent(range)}`
+    ),
+  /** Pump on/off events for history. */
+  getHistoryPumpEvents: (range: HistoryRange) =>
+    request<{ events: PumpEventRecord[] }>(
+      `/history/pump-events?range=${encodeURIComponent(range)}`
+    ),
+};
+
+export type HistoryRange = "day" | "week" | "month" | "year";
+
+export type HistoryReadingPoint = {
+  created_at: string;
+  water_level?: number;
+  humidity?: number;
+  air_temp?: number;
+  pcb_temp?: number;
+  light_percentage?: number;
+};
+
+export type PumpEventRecord = {
+  created_at: string;
+  is_on: boolean;
+  trigger: string;
+  rule_id: string | null;
 };
 
 export type PlantOfTheDay = {
