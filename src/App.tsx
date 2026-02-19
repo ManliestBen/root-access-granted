@@ -139,7 +139,6 @@ function App() {
     pumpStats: null,
   });
   const [lightBrightnessSlider, setLightBrightnessSlider] = useState(50);
-  const [pumpSpeedSlider, setPumpSpeedSlider] = useState(100);
   const [cameraUpperError, setCameraUpperError] = useState<string | null>(null);
   const [cameraLowerError, setCameraLowerError] = useState<string | null>(null);
   const [cameraPhotos, setCameraPhotos] = useState<{ filename: string; url: string }[]>([]);
@@ -272,7 +271,6 @@ function App() {
         pumpStats: pumpStats ?? null,
       });
       if (lightBrightness != null) setLightBrightnessSlider(lightBrightness);
-      if (pumpSpeed != null) setPumpSpeedSlider(pumpSpeed);
       setLastUpdate(new Date());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch");
@@ -390,7 +388,6 @@ function App() {
     try {
       await api.setPumpSpeed(100);
       await api.pumpOn();
-      setPumpSpeedSlider(100);
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pump on failed");
@@ -406,7 +403,6 @@ function App() {
       await fetchRules();
       await api.setPumpSpeed(100);
       await api.pumpOn();
-      setPumpSpeedSlider(100);
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Manual watering failed");
@@ -421,16 +417,6 @@ function App() {
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pump off failed");
-    }
-  };
-
-  const handlePumpSpeed = async (value: number) => {
-    setPumpSpeedSlider(value);
-    try {
-      await api.setPumpSpeed(value);
-      await fetchAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Set pump speed failed");
     }
   };
 
