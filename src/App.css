@@ -92,10 +92,19 @@ header .header-logo {
 
 .controls-row .card {
   min-width: 0;
-  width: 100%;
-  max-width: 42rem;
+  width: 75%;
+  max-width: 31.5rem;
   justify-self: center;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.controls-row .card .controls {
+  align-items: center;
+  width: 100%;
 }
 
 .controls-row-mascot {
@@ -389,6 +398,7 @@ header .badge {
 
 .controls .slider-row input[type="range"] {
   flex: 1;
+  min-width: 0;
   height: 8px;
   border-radius: 4px;
   background: var(--surface2);
@@ -406,7 +416,7 @@ header .badge {
 }
 
 .controls .slider-row span {
-  min-width: 2.5rem;
+  min-width: 2rem;
   font-size: 0.9rem;
   color: var(--text-muted);
 }
@@ -440,6 +450,36 @@ header .badge {
 
 .camera-row-buttons.controls {
   flex-direction: row;
+}
+
+/* Camera section: no glow on buttons */
+.camera-row-buttons .btn-on,
+.camera-row-buttons .btn-off,
+.camera-placeholder .btn-off {
+  box-shadow: none;
+}
+
+.camera-row-buttons .btn-on:hover,
+.camera-row-buttons .btn-off:hover,
+.camera-placeholder .btn-off:hover {
+  box-shadow: none;
+}
+
+/* Refresh button: green, circular arrow icon, no glow */
+.btn-refresh {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  box-shadow: none;
+  padding: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-refresh:hover {
+  background: var(--accent-dim);
+  box-shadow: none;
 }
 
 .camera-placeholder {
@@ -636,6 +676,11 @@ header .badge {
   gap: 0.75rem;
 }
 
+.schedule-list-wrap {
+  position: relative;
+  min-height: 2rem;
+}
+
 .schedule-column-title {
   margin: 0;
   font-size: 0.9rem;
@@ -732,13 +777,15 @@ header .badge {
 }
 
 .schedule-edit-btn {
-  background: var(--surface);
-  color: var(--accent);
-  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
 }
 
 .schedule-edit-btn:hover {
-  background: rgba(74, 222, 128, 0.12);
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(74, 222, 128, 0.08);
 }
 
 .schedule-delete-btn {
@@ -854,10 +901,36 @@ header .badge {
   background: var(--border);
 }
 
+.schedule-form-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 28rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.schedule-form-modal h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
 .schedule-form {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.schedule-form-modal .schedule-form-row,
+.schedule-form-modal .schedule-form-actions {
+  margin-top: 0.75rem;
+}
+
+.schedule-form-modal .schedule-form-actions {
+  margin-top: 1rem;
 }
 
 .schedule-form h4 {
@@ -1130,6 +1203,40 @@ header .logout-btn:hover {
   width: 5rem;
   padding: 0.35rem 0.5rem;
   font-size: 1rem;
+}
+
+.override-modal button {
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+  border: none;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.override-modal .btn-on {
+  background: var(--accent);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+.override-modal .btn-on:hover {
+  background: var(--accent-dim);
+  box-shadow: none;
+}
+
+.override-modal .btn-off {
+  background: var(--danger);
+  color: var(--bg);
+  border: 1px solid var(--danger);
+  box-shadow: none;
+}
+
+.override-modal .btn-off:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  box-shadow: none;
 }
 
 .settings-modal h2 {

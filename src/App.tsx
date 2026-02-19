@@ -283,13 +283,6 @@ function App() {
 
   useEffect(() => {
     if (!token) return;
-    fetchAll();
-    const t = setInterval(fetchAll, 30_000);
-    return () => clearInterval(t);
-  }, [token, fetchAll]);
-
-  useEffect(() => {
-    if (!token) return;
     api.getSettings().then(setDashboardSettings).catch(() => {});
   }, [token]);
 
@@ -495,6 +488,18 @@ function App() {
     setRulesLoading(true);
     fetchRules();
   }, [token, fetchRules]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchAll();
+    const paused = isPausedInFuture(lightRulesPausedUntil) || isPausedInFuture(pumpRulesPausedUntil);
+    const intervalMs = paused ? 5_000 : 30_000;
+    const t = setInterval(() => {
+      fetchAll();
+      if (paused) fetchRules();
+    }, intervalMs);
+    return () => clearInterval(t);
+  }, [token, fetchAll, fetchRules, lightRulesPausedUntil, pumpRulesPausedUntil]);
 
   // Keep "Current time (Central)" in sync for schedule UI (Netlify may be in any TZ)
   useEffect(() => {
@@ -793,7 +798,7 @@ function App() {
         </div>
 
         <div className="controls-row">
-          <div className="card card-control-wrap">
+          <div className="card">
             <h3>Lights</h3>
             <div className="controls">
               <div className="controls-on-off-buttons">
@@ -826,16 +831,11 @@ function App() {
                 <span>{lightBrightnessSlider}%</span>
               </div>
             </div>
-            {isPausedInFuture(lightRulesPausedUntil) && lightRulesPausedUntil && (
-              <div className="controls-paused-overlay" aria-live="polite">
-                <span>Paused until {formatPausedUntil(lightRulesPausedUntil)}</span>
-              </div>
-            )}
           </div>
           <div className="controls-row-mascot">
             <img src="/images/mascot.png" alt="" aria-hidden />
           </div>
-          <div className="card card-control-wrap">
+          <div className="card">
             <h3>Pump</h3>
             <div className="controls">
               <div className="controls-on-off-buttons">
@@ -854,15 +854,18 @@ function App() {
                   Off
                 </button>
               </div>
+              <button
+                type="button"
+                className="schedule-add-btn"
+                style={{ marginTop: "0.5rem" }}
+                onClick={() => setPumpManualModal({ open: true, minutes: "5" })}
+              >
+                Manual water
+              </button>
               {state.pumpStats?.power != null && (
                 <p className="hint">Power: {state.pumpStats.power} W</p>
               )}
             </div>
-            {isPausedInFuture(pumpRulesPausedUntil) && pumpRulesPausedUntil && (
-              <div className="controls-paused-overlay" aria-live="polite">
-                <span>Paused until {formatPausedUntil(pumpRulesPausedUntil)}</span>
-              </div>
-            )}
           </div>
         </div>
 
@@ -888,194 +891,96 @@ function App() {
               <div className="schedule-columns">
                 <div className="schedule-column">
                   <h4 className="schedule-column-title">Light rules</h4>
-                  <ul className="schedule-list">
-                    {rules.filter((r) => r.type === "light").map((r) => (
-                      <li
-                        key={r.id}
-                        className={`schedule-item${r.paused ? " schedule-item--paused" : ""}`}
-                      >
-                        <span className="schedule-item-desc">
-                          {formatTime12h(r.start_time)}
-                          {r.end_time ? ` – ${formatTime12h(r.end_time)}` : ""} → {r.brightness_pct}%
-                        </span>
-                        {r.enabled === false && <span className="schedule-item-badge">Off</span>}
-                        {r.paused && <span className="schedule-item-badge schedule-item-badge--paused">Paused</span>}
-                        <div className="schedule-item-actions">
-                          <button
-                            type="button"
-                            className="schedule-pause-btn"
-                            onClick={() => toggleRulePaused(r)}
-                            title={r.paused ? "Resume" : "Pause"}
-                          >
-                            {r.paused ? "Resume" : "Pause"}
-                          </button>
-                          <button type="button" className="schedule-edit-btn" onClick={() => openEditRule(r)}>
-                            Edit
-                          </button>
-                          <button type="button" className="schedule-delete-btn" onClick={() => deleteRuleById(r.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="schedule-list-wrap">
+                    <ul className="schedule-list">
+                      {rules.filter((r) => r.type === "light").map((r) => (
+                        <li
+                          key={r.id}
+                          className={`schedule-item${r.paused ? " schedule-item--paused" : ""}`}
+                        >
+                          <span className="schedule-item-desc">
+                            {formatTime12h(r.start_time)}
+                            {r.end_time ? ` – ${formatTime12h(r.end_time)}` : ""} → {r.brightness_pct}%
+                          </span>
+                          {r.enabled === false && <span className="schedule-item-badge">Off</span>}
+                          {r.paused && <span className="schedule-item-badge schedule-item-badge--paused">Paused</span>}
+                          <div className="schedule-item-actions">
+                            <button
+                              type="button"
+                              className="schedule-pause-btn"
+                              onClick={() => toggleRulePaused(r)}
+                              title={r.paused ? "Resume" : "Pause"}
+                            >
+                              {r.paused ? "Resume" : "Pause"}
+                            </button>
+                            <button type="button" className="schedule-edit-btn" onClick={() => openEditRule(r)}>
+                              Edit
+                            </button>
+                            <button type="button" className="schedule-delete-btn" onClick={() => deleteRuleById(r.id)}>
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {isPausedInFuture(lightRulesPausedUntil) && lightRulesPausedUntil && (
+                      <div className="controls-paused-overlay" aria-live="polite">
+                        <span>Paused until {formatPausedUntil(lightRulesPausedUntil)}</span>
+                      </div>
+                    )}
+                  </div>
                   <button type="button" className="schedule-add-btn" onClick={() => openNewRule("light")}>
                     + Add light rule
                   </button>
                 </div>
                 <div className="schedule-column">
                   <h4 className="schedule-column-title">Pump rules</h4>
-                  <ul className="schedule-list">
-                    {rules.filter((r) => r.type === "pump").map((r) => (
-                      <li
-                        key={r.id}
-                        className={`schedule-item${r.paused ? " schedule-item--paused" : ""}`}
-                      >
-                        <span className="schedule-item-desc">
-                          {formatTime12h(r.time)} for {r.duration_minutes} min
-                        </span>
-                        {r.enabled === false && <span className="schedule-item-badge">Off</span>}
-                        {r.paused && <span className="schedule-item-badge schedule-item-badge--paused">Paused</span>}
-                        <div className="schedule-item-actions">
-                          <button
-                            type="button"
-                            className="schedule-pause-btn"
-                            onClick={() => toggleRulePaused(r)}
-                            title={r.paused ? "Resume" : "Pause"}
-                          >
-                            {r.paused ? "Resume" : "Pause"}
-                          </button>
-                          <button type="button" className="schedule-edit-btn" onClick={() => openEditRule(r)}>
-                            Edit
-                          </button>
-                          <button type="button" className="schedule-delete-btn" onClick={() => deleteRuleById(r.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="schedule-list-wrap">
+                    <ul className="schedule-list">
+                      {rules.filter((r) => r.type === "pump").map((r) => (
+                        <li
+                          key={r.id}
+                          className={`schedule-item${r.paused ? " schedule-item--paused" : ""}`}
+                        >
+                          <span className="schedule-item-desc">
+                            {formatTime12h(r.time)} for {r.duration_minutes} min
+                          </span>
+                          {r.enabled === false && <span className="schedule-item-badge">Off</span>}
+                          {r.paused && <span className="schedule-item-badge schedule-item-badge--paused">Paused</span>}
+                          <div className="schedule-item-actions">
+                            <button
+                              type="button"
+                              className="schedule-pause-btn"
+                              onClick={() => toggleRulePaused(r)}
+                              title={r.paused ? "Resume" : "Pause"}
+                            >
+                              {r.paused ? "Resume" : "Pause"}
+                            </button>
+                            <button type="button" className="schedule-edit-btn" onClick={() => openEditRule(r)}>
+                              Edit
+                            </button>
+                            <button type="button" className="schedule-delete-btn" onClick={() => deleteRuleById(r.id)}>
+                              Delete
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    {isPausedInFuture(pumpRulesPausedUntil) && pumpRulesPausedUntil && (
+                      <div className="controls-paused-overlay" aria-live="polite">
+                        <span>Paused until {formatPausedUntil(pumpRulesPausedUntil)}</span>
+                      </div>
+                    )}
+                  </div>
                   <button type="button" className="schedule-add-btn" onClick={() => openNewRule("pump")}>
                     + Add pump rule
                   </button>
                 </div>
               </div>
-              {rules.length === 0 && !scheduleForm.open && (
+              {rules.length === 0 && (
                 <p className="hint">No rules yet. Add a light or pump rule above.</p>
               )}
             </>
-          )}
-
-          {scheduleForm.open && (
-            <div className="schedule-form">
-              <h4>{scheduleForm.editingId ? "Edit rule" : "New rule"}</h4>
-              <p className="hint" style={{ marginBottom: "1rem", fontSize: "0.8rem" }}>
-                Enter times in Central Time (same as device).
-              </p>
-              <div className="schedule-form-row">
-                <label>Type</label>
-                <select
-                  value={scheduleForm.type}
-                  onChange={(e) => setScheduleForm((f) => ({ ...f, type: e.target.value as "light" | "pump" }))}
-                  disabled={!!scheduleForm.editingId}
-                >
-                  <option value="light">Light</option>
-                  <option value="pump">Pump</option>
-                </select>
-              </div>
-              {scheduleForm.type === "light" && (
-                <>
-                  <div className="schedule-form-row">
-                    <label>Start time (Central)</label>
-                    <div className="schedule-form-time-wrap">
-                      <input
-                        type="time"
-                        value={scheduleForm.start_time}
-                        onChange={(e) => setScheduleForm((f) => ({ ...f, start_time: e.target.value }))}
-                      />
-                      <span className="schedule-form-time-12h">{formatTime12h(scheduleForm.start_time)}</span>
-                    </div>
-                  </div>
-                  <div className="schedule-form-row schedule-form-check">
-                    <input
-                      type="checkbox"
-                      id="use_range"
-                      checked={scheduleForm.use_range}
-                      onChange={(e) => setScheduleForm((f) => ({ ...f, use_range: e.target.checked }))}
-                    />
-                    <label htmlFor="use_range">Time range (end time turns light off)</label>
-                  </div>
-                  {scheduleForm.use_range && (
-                    <div className="schedule-form-row">
-                      <label>End time (Central)</label>
-                      <div className="schedule-form-time-wrap">
-                        <input
-                          type="time"
-                          value={scheduleForm.end_time}
-                          onChange={(e) => setScheduleForm((f) => ({ ...f, end_time: e.target.value }))}
-                        />
-                        <span className="schedule-form-time-12h">{formatTime12h(scheduleForm.end_time)}</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="schedule-form-row">
-                    <label>Brightness (%) — 0 = off</label>
-                    <div className="slider-row">
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={scheduleForm.brightness_pct}
-                        onChange={(e) => setScheduleForm((f) => ({ ...f, brightness_pct: Number(e.target.value) }))}
-                      />
-                      <span>{scheduleForm.brightness_pct}%</span>
-                    </div>
-                  </div>
-                </>
-              )}
-              {scheduleForm.type === "pump" && (
-                <>
-                  <div className="schedule-form-row">
-                    <label>Time (Central)</label>
-                    <div className="schedule-form-time-wrap">
-                      <input
-                        type="time"
-                        value={scheduleForm.time}
-                        onChange={(e) => setScheduleForm((f) => ({ ...f, time: e.target.value }))}
-                      />
-                      <span className="schedule-form-time-12h">{formatTime12h(scheduleForm.time)}</span>
-                    </div>
-                  </div>
-                  <div className="schedule-form-row">
-                    <label>Duration (minutes)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={120}
-                      value={scheduleForm.duration_minutes}
-                      onChange={(e) => setScheduleForm((f) => ({ ...f, duration_minutes: Number(e.target.value) || 5 }))}
-                    />
-                  </div>
-                </>
-              )}
-              <div className="schedule-form-row schedule-form-check">
-                <input
-                  type="checkbox"
-                  id="rule_enabled"
-                  checked={scheduleForm.enabled}
-                  onChange={(e) => setScheduleForm((f) => ({ ...f, enabled: e.target.checked }))}
-                />
-                <label htmlFor="rule_enabled">Enabled</label>
-              </div>
-              <div className="schedule-form-actions">
-                <button type="button" className="schedule-save-btn" onClick={submitRuleForm}>
-                  {scheduleForm.editingId ? "Save" : "Add rule"}
-                </button>
-                <button type="button" className="schedule-cancel-btn" onClick={closeRuleForm}>
-                  Cancel
-                </button>
-              </div>
-            </div>
           )}
         </div>
 
@@ -1110,8 +1015,19 @@ function App() {
                 >
                   {captureSaveLoading ? "Saving…" : "Capture & save"}
                 </button>
-                <button type="button" className="btn-off" onClick={refreshCameraUpper}>
-                  Refresh
+                <button
+                  type="button"
+                  className="btn-refresh"
+                  onClick={refreshCameraUpper}
+                  title="Refresh"
+                  aria-label="Refresh"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 2v6h-6" />
+                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                    <path d="M3 22v-6h6" />
+                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1143,8 +1059,19 @@ function App() {
                 >
                   {captureSaveLoading ? "Saving…" : "Capture & save"}
                 </button>
-                <button type="button" className="btn-off" onClick={refreshCameraLower}>
-                  Refresh
+                <button
+                  type="button"
+                  className="btn-refresh"
+                  onClick={refreshCameraLower}
+                  title="Refresh"
+                  aria-label="Refresh"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 2v6h-6" />
+                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                    <path d="M3 22v-6h6" />
+                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1202,6 +1129,126 @@ function App() {
           </div>
         </div>
       </div>
+
+      {scheduleForm.open && (
+        <div
+          className="modal-overlay"
+          onClick={closeRuleForm}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="schedule-form-modal-title"
+        >
+          <div className="schedule-form-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 id="schedule-form-modal-title">{scheduleForm.editingId ? "Edit rule" : "New rule"}</h2>
+            <p className="hint" style={{ marginBottom: "1rem", fontSize: "0.8rem" }}>
+              Enter times in Central Time (same as device).
+            </p>
+            <div className="schedule-form-row">
+              <label>Type</label>
+              <select
+                value={scheduleForm.type}
+                onChange={(e) => setScheduleForm((f) => ({ ...f, type: e.target.value as "light" | "pump" }))}
+                disabled={!!scheduleForm.editingId}
+              >
+                <option value="light">Light</option>
+                <option value="pump">Pump</option>
+              </select>
+            </div>
+            {scheduleForm.type === "light" && (
+              <>
+                <div className="schedule-form-row">
+                  <label>Start time (Central)</label>
+                  <div className="schedule-form-time-wrap">
+                    <input
+                      type="time"
+                      value={scheduleForm.start_time}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, start_time: e.target.value }))}
+                    />
+                    <span className="schedule-form-time-12h">{formatTime12h(scheduleForm.start_time)}</span>
+                  </div>
+                </div>
+                <div className="schedule-form-row schedule-form-check">
+                  <input
+                    type="checkbox"
+                    id="use_range"
+                    checked={scheduleForm.use_range}
+                    onChange={(e) => setScheduleForm((f) => ({ ...f, use_range: e.target.checked }))}
+                  />
+                  <label htmlFor="use_range">Time range (end time turns light off)</label>
+                </div>
+                {scheduleForm.use_range && (
+                  <div className="schedule-form-row">
+                    <label>End time (Central)</label>
+                    <div className="schedule-form-time-wrap">
+                      <input
+                        type="time"
+                        value={scheduleForm.end_time}
+                        onChange={(e) => setScheduleForm((f) => ({ ...f, end_time: e.target.value }))}
+                      />
+                      <span className="schedule-form-time-12h">{formatTime12h(scheduleForm.end_time)}</span>
+                    </div>
+                  </div>
+                )}
+                <div className="schedule-form-row">
+                  <label>Brightness (%) — 0 = off</label>
+                  <div className="slider-row">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={scheduleForm.brightness_pct}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, brightness_pct: Number(e.target.value) }))}
+                    />
+                    <span>{scheduleForm.brightness_pct}%</span>
+                  </div>
+                </div>
+              </>
+            )}
+            {scheduleForm.type === "pump" && (
+              <>
+                <div className="schedule-form-row">
+                  <label>Time (Central)</label>
+                  <div className="schedule-form-time-wrap">
+                    <input
+                      type="time"
+                      value={scheduleForm.time}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, time: e.target.value }))}
+                    />
+                    <span className="schedule-form-time-12h">{formatTime12h(scheduleForm.time)}</span>
+                  </div>
+                </div>
+                <div className="schedule-form-row">
+                  <label>Duration (minutes)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={scheduleForm.duration_minutes}
+                    onChange={(e) => setScheduleForm((f) => ({ ...f, duration_minutes: Number(e.target.value) || 5 }))}
+                  />
+                </div>
+              </>
+            )}
+            <div className="schedule-form-row schedule-form-check">
+              <input
+                type="checkbox"
+                id="rule_enabled"
+                checked={scheduleForm.enabled}
+                onChange={(e) => setScheduleForm((f) => ({ ...f, enabled: e.target.checked }))}
+              />
+              <label htmlFor="rule_enabled">Enabled</label>
+            </div>
+            <div className="schedule-form-actions">
+              <button type="button" className="schedule-save-btn" onClick={submitRuleForm}>
+                {scheduleForm.editingId ? "Save" : "Add rule"}
+              </button>
+              <button type="button" className="schedule-cancel-btn" onClick={closeRuleForm}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {resumeModal.open && (
         <div
