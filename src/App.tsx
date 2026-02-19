@@ -19,6 +19,21 @@ const AUTH_STORAGE_KEY = "gardyn_token";
 /** All schedule times are in Central Time (device time on the Pi). */
 const CENTRAL_TZ = "America/Chicago";
 
+/** Build Wikipedia article URL from plant (genus + epithet, or scientific name or common name). */
+function plantWikipediaUrl(plant: PlantOfTheDay): string {
+  const base = "https://en.wikipedia.org/wiki/";
+  const genus = plant.genus?.trim();
+  const epithet = plant.species_epithet?.trim();
+  const title =
+    genus && epithet
+      ? `${genus} ${epithet}`
+      : Array.isArray(plant.scientific_name) && plant.scientific_name.length > 0 && plant.scientific_name[0]?.trim()
+        ? plant.scientific_name[0].trim()
+        : (plant.common_name || "Plant").trim();
+  const slug = title.replace(/ /g, "_");
+  return base + encodeURIComponent(slug);
+}
+
 function formatTimeCentralShort(date: Date): string {
   return date.toLocaleTimeString("en-US", {
     timeZone: CENTRAL_TZ,
@@ -865,7 +880,6 @@ function App() {
                   />
                 ) : null}
                 <p className="plant-of-the-day-name">{plantOfTheDay.common_name || "Unknown"}</p>
-                <p className="hint" style={{ marginTop: 0, fontSize: "0.7rem" }}>Tap for details</p>
               </>
             ) : (
               <p className="hint" style={{ marginTop: 0 }}>Coming soon</p>
@@ -1375,55 +1389,74 @@ function App() {
 
       {plantDetailOpen && plantOfTheDay && (
         <div className="modal-overlay" onClick={() => setPlantDetailOpen(false)} role="dialog" aria-modal="true" aria-labelledby="plant-detail-modal-title">
-          <div className="settings-modal plant-detail-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "32rem" }}>
+          <div className="settings-modal plant-detail-modal" onClick={(e) => e.stopPropagation()}>
             <h2 id="plant-detail-modal-title">{plantOfTheDay.common_name || "Plant of the day"}</h2>
             {(plantOfTheDay.scientific_name?.length ?? 0) > 0 && (
-              <p className="hint" style={{ marginTop: 0, marginBottom: "0.75rem", fontStyle: "italic" }}>
+              <p className="hint plant-detail-subtitle" style={{ marginTop: 0, marginBottom: "0.75rem", fontStyle: "italic" }}>
                 {plantOfTheDay.scientific_name!.join(", ")}
               </p>
             )}
             {(plantOfTheDay.default_image?.regular_url || plantOfTheDay.default_image?.medium_url) && (
-              <img
-                src={plantOfTheDay.default_image!.regular_url || plantOfTheDay.default_image!.medium_url}
-                alt=""
-                className="plant-detail-image"
-                style={{ width: "100%", borderRadius: "var(--radius)", marginBottom: "1rem" }}
-              />
+              <div className="plant-detail-image-wrap">
+                <img
+                  src={plantOfTheDay.default_image!.regular_url || plantOfTheDay.default_image!.medium_url}
+                  alt=""
+                  className="plant-detail-image"
+                />
+              </div>
             )}
-            {plantOfTheDay.description && (
-              <p style={{ marginBottom: "1rem", lineHeight: 1.5 }}>{plantOfTheDay.description}</p>
-            )}
-            <div className="plant-detail-grid" style={{ display: "grid", gap: "0.5rem", marginBottom: "1rem" }}>
-              {plantOfTheDay.type && <div><strong>Type:</strong> {plantOfTheDay.type}</div>}
-              {plantOfTheDay.cycle && <div><strong>Cycle:</strong> {plantOfTheDay.cycle}</div>}
-              {plantOfTheDay.watering && <div><strong>Watering:</strong> {plantOfTheDay.watering}</div>}
-              {plantOfTheDay.watering_general_benchmark?.value && (
-                <div><strong>Watering:</strong> every {plantOfTheDay.watering_general_benchmark.value} {plantOfTheDay.watering_general_benchmark.unit || "days"}</div>
+            <div className="plant-detail-content">
+              {plantOfTheDay.description && (
+                <p className="plant-detail-description">{plantOfTheDay.description}</p>
               )}
-              {(plantOfTheDay.sunlight?.length ?? 0) > 0 && (
-                <div><strong>Sunlight:</strong> {plantOfTheDay.sunlight!.join(", ")}</div>
-              )}
-              {(plantOfTheDay.origin?.length ?? 0) > 0 && (
-                <div><strong>Origin:</strong> {plantOfTheDay.origin!.join(", ")}</div>
-              )}
-              {plantOfTheDay.hardiness && (plantOfTheDay.hardiness.min || plantOfTheDay.hardiness.max) && (
-                <div><strong>Hardiness zones:</strong> {[plantOfTheDay.hardiness.min, plantOfTheDay.hardiness.max].filter(Boolean).join("–")}</div>
-              )}
-              {plantOfTheDay.maintenance && <div><strong>Maintenance:</strong> {plantOfTheDay.maintenance}</div>}
-              {plantOfTheDay.care_level && <div><strong>Care level:</strong> {plantOfTheDay.care_level}</div>}
-              {plantOfTheDay.growth_rate && <div><strong>Growth rate:</strong> {plantOfTheDay.growth_rate}</div>}
-              {(plantOfTheDay.propagation?.length ?? 0) > 0 && (
-                <div><strong>Propagation:</strong> {plantOfTheDay.propagation!.join(", ")}</div>
-              )}
+              <div className="plant-detail-grid">
+                {[
+                  plantOfTheDay.type && <div key="type"><strong>Type:</strong> {plantOfTheDay.type}</div>,
+                  plantOfTheDay.cycle && <div key="cycle"><strong>Cycle:</strong> {plantOfTheDay.cycle}</div>,
+                  plantOfTheDay.watering && <div key="watering"><strong>Watering:</strong> {plantOfTheDay.watering}</div>,
+                  plantOfTheDay.watering_general_benchmark?.value && (
+                    <div key="watering-benchmark"><strong>Watering:</strong> every {plantOfTheDay.watering_general_benchmark!.value} {plantOfTheDay.watering_general_benchmark!.unit || "days"}</div>
+                  ),
+                  (plantOfTheDay.sunlight?.length ?? 0) > 0 && (
+                    <div key="sunlight"><strong>Sunlight:</strong> {plantOfTheDay.sunlight!.join(", ")}</div>
+                  ),
+                  (plantOfTheDay.origin?.length ?? 0) > 0 && (
+                    <div key="origin"><strong>Origin:</strong> {plantOfTheDay.origin!.join(", ")}</div>
+                  ),
+                  plantOfTheDay.hardiness && (plantOfTheDay.hardiness.min || plantOfTheDay.hardiness.max) && (
+                    <div key="hardiness"><strong>Hardiness zones:</strong> {[plantOfTheDay.hardiness!.min, plantOfTheDay.hardiness!.max].filter(Boolean).join("–")}</div>
+                  ),
+                  plantOfTheDay.maintenance && <div key="maintenance"><strong>Maintenance:</strong> {plantOfTheDay.maintenance}</div>,
+                  (plantOfTheDay.propagation?.length ?? 0) > 0 && (
+                    <div key="propagation"><strong>Propagation:</strong> {plantOfTheDay.propagation!.join(", ")}</div>
+                  ),
+                  plantOfTheDay.growth_rate && <div key="growth_rate"><strong>Growth rate:</strong> {plantOfTheDay.growth_rate}</div>,
+                  plantOfTheDay.care_level && <div key="care_level"><strong>Care level:</strong> {plantOfTheDay.care_level}</div>,
+                ]
+                  .filter(Boolean)
+                  .reduce<React.ReactNode[][]>(
+                    (cols, node, i) => {
+                      const col = i % 3;
+                      cols[col].push(node);
+                      return cols;
+                    },
+                    [[], [], []]
+                  )
+                  .map((col, i) => (
+                    <div key={i} className="plant-detail-grid-col">
+                      {col}
+                    </div>
+                  ))}
+              </div>
+              <div className="plant-detail-actions">
+                <a href={plantOfTheDay.wikipedia_url ?? plantWikipediaUrl(plantOfTheDay)} target="_blank" rel="noopener noreferrer" className="schedule-add-btn" style={{ display: "inline-block", textDecoration: "none" }}>
+                  View on Wikipedia
+                </a>
+                <button type="button" className="schedule-cancel-btn" onClick={() => setPlantDetailOpen(false)}>
+                  Close
+                </button>
+              </div>
             </div>
-            {plantOfTheDay.id != null && (
-              <a href={`https://perenual.com/species-details/${plantOfTheDay.id}`} target="_blank" rel="noopener noreferrer" className="schedule-add-btn" style={{ display: "inline-block", textDecoration: "none", marginBottom: "0.5rem" }}>
-                View on Perenual
-              </a>
-            )}
-            <button type="button" className="schedule-cancel-btn" onClick={() => setPlantDetailOpen(false)} style={{ marginLeft: "0.5rem" }}>
-              Close
-            </button>
           </div>
         </div>
       )}

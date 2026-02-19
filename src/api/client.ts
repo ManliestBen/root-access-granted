@@ -220,6 +220,10 @@ export const api = {
 export type PlantOfTheDay = {
   id?: number;
   common_name?: string;
+  genus?: string;
+  species_epithet?: string;
+  /** Server-computed Wikipedia URL (genus + epithet); use this when present. */
+  wikipedia_url?: string;
   scientific_name?: string[];
   description?: string;
   type?: string;

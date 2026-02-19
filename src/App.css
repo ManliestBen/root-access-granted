@@ -109,7 +109,7 @@ header .header-logo {
 
 .plant-of-the-day-card .plant-of-the-day-thumb {
   width: 100%;
-  max-width: 120px;
+  max-width: 200px;
   height: auto;
   border-radius: var(--radius);
   object-fit: cover;
@@ -123,8 +123,70 @@ header .header-logo {
   line-height: 1.2;
 }
 
+/* Plant detail modal: wider and taller; title + image on top, then centered content column.
+   Must override .settings-modal (max-width: 44rem) so use combined selector. */
+.settings-modal.plant-detail-modal {
+  max-width: 50rem;
+  width: 88vw;
+  min-height: 78vh;
+  max-height: 90vh;
+  padding: 2rem 2.5rem;
+}
+
+.plant-detail-modal h2,
+.plant-detail-modal .plant-detail-subtitle {
+  text-align: center;
+}
+
+.plant-detail-modal .plant-detail-image-wrap {
+  margin: 0.25rem 0 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.plant-detail-modal .plant-detail-image {
+  width: 100%;
+  max-width: 30rem;
+  height: auto;
+  border-radius: var(--radius);
+  display: block;
+}
+
+.plant-detail-modal .plant-detail-content {
+  margin-top: 0;
+}
+
+.plant-detail-modal .plant-detail-description {
+  margin: 0 0 1rem;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
 .plant-detail-modal .plant-detail-grid {
   font-size: 0.9rem;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  max-width: 48rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.plant-detail-modal .plant-detail-grid-col {
+  flex: 0 0 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.plant-detail-modal .plant-detail-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .controls-row-mascot {
