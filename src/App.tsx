@@ -19,17 +19,21 @@ const AUTH_STORAGE_KEY = "gardyn_token";
 /** All schedule times are in Central Time (device time on the Pi). */
 const CENTRAL_TZ = "America/Chicago";
 
-/** Build Wikipedia article URL from plant (genus + epithet, or scientific name or common name). */
+/** Build Wikipedia article URL from plant (genus + epithet, or scientific name or common name).
+ * When title contains an apostrophe (cultivar), use genus/first word only to avoid broken links. */
 function plantWikipediaUrl(plant: PlantOfTheDay): string {
   const base = "https://en.wikipedia.org/wiki/";
   const genus = plant.genus?.trim();
   const epithet = plant.species_epithet?.trim();
-  const title =
+  let title =
     genus && epithet
       ? `${genus} ${epithet}`
       : Array.isArray(plant.scientific_name) && plant.scientific_name.length > 0 && plant.scientific_name[0]?.trim()
         ? plant.scientific_name[0].trim()
         : (plant.common_name || "Plant").trim();
+  if (title.includes("'")) {
+    title = genus || title.split(/\s+/)[0] || "Plant";
+  }
   const slug = title.replace(/ /g, "_");
   return base + encodeURIComponent(slug);
 }
