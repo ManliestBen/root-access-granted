@@ -7,6 +7,7 @@ import {
   type ScheduleRule,
   type ScheduleRuleCreate,
   type AppSettings,
+  type PlantOfTheDay,
 } from "./api/client";
 import LoginView from "./LoginView";
 import AuthImg from "./AuthImg";
@@ -156,6 +157,8 @@ function App() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [slackTestLoading, setSlackTestLoading] = useState(false);
   const [slackTestResult, setSlackTestResult] = useState<string | null>(null);
+  const [plantOfTheDay, setPlantOfTheDay] = useState<PlantOfTheDay | null>(null);
+  const [plantDetailOpen, setPlantDetailOpen] = useState(false);
   const [lightOverrideModal, setLightOverrideModal] = useState<{
     open: boolean;
     action: "on" | "off";
@@ -284,6 +287,11 @@ function App() {
   useEffect(() => {
     if (!token) return;
     api.getSettings().then(setDashboardSettings).catch(() => {});
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    api.getPlantOfTheDay().then(setPlantOfTheDay).catch(() => setPlantOfTheDay(null));
   }, [token]);
 
   const handleLightOn = async () => {
@@ -838,6 +846,31 @@ function App() {
           <div className="controls-row-mascot">
             <img src="/images/mascot.png" alt="" aria-hidden />
           </div>
+          <div
+            className="card plant-of-the-day-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => plantOfTheDay && setPlantDetailOpen(true)}
+            onKeyDown={(e) => plantOfTheDay && (e.key === "Enter" || e.key === " ") && setPlantDetailOpen(true)}
+            style={plantOfTheDay ? { cursor: "pointer" } : undefined}
+          >
+            <h3>Plant of the day</h3>
+            {plantOfTheDay ? (
+              <>
+                {plantOfTheDay.default_image?.thumbnail || plantOfTheDay.default_image?.small_url ? (
+                  <img
+                    src={plantOfTheDay.default_image.thumbnail || plantOfTheDay.default_image.small_url}
+                    alt=""
+                    className="plant-of-the-day-thumb"
+                  />
+                ) : null}
+                <p className="plant-of-the-day-name">{plantOfTheDay.common_name || "Unknown"}</p>
+                <p className="hint" style={{ marginTop: 0, fontSize: "0.7rem" }}>Tap for details</p>
+              </>
+            ) : (
+              <p className="hint" style={{ marginTop: 0 }}>Coming soon</p>
+            )}
+          </div>
           <div className="card">
             <h3>Pump</h3>
             <div className="controls">
@@ -1340,6 +1373,61 @@ function App() {
         </div>
       )}
 
+      {plantDetailOpen && plantOfTheDay && (
+        <div className="modal-overlay" onClick={() => setPlantDetailOpen(false)} role="dialog" aria-modal="true" aria-labelledby="plant-detail-modal-title">
+          <div className="settings-modal plant-detail-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "32rem" }}>
+            <h2 id="plant-detail-modal-title">{plantOfTheDay.common_name || "Plant of the day"}</h2>
+            {(plantOfTheDay.scientific_name?.length ?? 0) > 0 && (
+              <p className="hint" style={{ marginTop: 0, marginBottom: "0.75rem", fontStyle: "italic" }}>
+                {plantOfTheDay.scientific_name!.join(", ")}
+              </p>
+            )}
+            {(plantOfTheDay.default_image?.regular_url || plantOfTheDay.default_image?.medium_url) && (
+              <img
+                src={plantOfTheDay.default_image!.regular_url || plantOfTheDay.default_image!.medium_url}
+                alt=""
+                className="plant-detail-image"
+                style={{ width: "100%", borderRadius: "var(--radius)", marginBottom: "1rem" }}
+              />
+            )}
+            {plantOfTheDay.description && (
+              <p style={{ marginBottom: "1rem", lineHeight: 1.5 }}>{plantOfTheDay.description}</p>
+            )}
+            <div className="plant-detail-grid" style={{ display: "grid", gap: "0.5rem", marginBottom: "1rem" }}>
+              {plantOfTheDay.type && <div><strong>Type:</strong> {plantOfTheDay.type}</div>}
+              {plantOfTheDay.cycle && <div><strong>Cycle:</strong> {plantOfTheDay.cycle}</div>}
+              {plantOfTheDay.watering && <div><strong>Watering:</strong> {plantOfTheDay.watering}</div>}
+              {plantOfTheDay.watering_general_benchmark?.value && (
+                <div><strong>Watering:</strong> every {plantOfTheDay.watering_general_benchmark.value} {plantOfTheDay.watering_general_benchmark.unit || "days"}</div>
+              )}
+              {(plantOfTheDay.sunlight?.length ?? 0) > 0 && (
+                <div><strong>Sunlight:</strong> {plantOfTheDay.sunlight!.join(", ")}</div>
+              )}
+              {(plantOfTheDay.origin?.length ?? 0) > 0 && (
+                <div><strong>Origin:</strong> {plantOfTheDay.origin!.join(", ")}</div>
+              )}
+              {plantOfTheDay.hardiness && (plantOfTheDay.hardiness.min || plantOfTheDay.hardiness.max) && (
+                <div><strong>Hardiness zones:</strong> {[plantOfTheDay.hardiness.min, plantOfTheDay.hardiness.max].filter(Boolean).join("–")}</div>
+              )}
+              {plantOfTheDay.maintenance && <div><strong>Maintenance:</strong> {plantOfTheDay.maintenance}</div>}
+              {plantOfTheDay.care_level && <div><strong>Care level:</strong> {plantOfTheDay.care_level}</div>}
+              {plantOfTheDay.growth_rate && <div><strong>Growth rate:</strong> {plantOfTheDay.growth_rate}</div>}
+              {(plantOfTheDay.propagation?.length ?? 0) > 0 && (
+                <div><strong>Propagation:</strong> {plantOfTheDay.propagation!.join(", ")}</div>
+              )}
+            </div>
+            {plantOfTheDay.id != null && (
+              <a href={`https://perenual.com/species-details/${plantOfTheDay.id}`} target="_blank" rel="noopener noreferrer" className="schedule-add-btn" style={{ display: "inline-block", textDecoration: "none", marginBottom: "0.5rem" }}>
+                View on Perenual
+              </a>
+            )}
+            <button type="button" className="schedule-cancel-btn" onClick={() => setPlantDetailOpen(false)} style={{ marginLeft: "0.5rem" }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {settingsOpen && (
         <div className="modal-overlay" onClick={closeSettingsModal} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
           <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
@@ -1456,7 +1544,7 @@ function App() {
                     <input type="number" step="any" value={settingsForm.pcb_temp_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_alert_threshold: Number(e.target.value) || 0 })} />
                   </div>
                 </section>
-                <section className="settings-section">
+                <section className="settings-section settings-section-slack">
                   <div className="settings-section-header">
                     <h4>Slack notifications</h4>
                     <label className="settings-enable-alerts">
@@ -1465,24 +1553,34 @@ function App() {
                     </label>
                   </div>
                   <div className="settings-form-row">
-                    <label>Webhook URL</label>
-                    <input type="url" placeholder="Leave blank to use server env" value={settingsForm.slack_webhook_url ?? ""} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_webhook_url: e.target.value.trim() || null })} />
+                    <label htmlFor="slack_webhook_url">Webhook URL</label>
+                    <input id="slack_webhook_url" type="url" placeholder="Leave blank to use server env" value={settingsForm.slack_webhook_url ?? ""} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_webhook_url: e.target.value.trim() || null })} />
                   </div>
-                  <p className="hint" style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Override SLACK_WEBHOOK_URL. Blank = use server environment.</p>
+                  <p className="hint settings-hint">Override SLACK_WEBHOOK_URL. Blank = use server environment.</p>
                   <div className="settings-form-row">
-                    <label>Cooldown (minutes)</label>
-                    <input type="number" min={1} max={120} value={settingsForm.slack_cooldown_minutes ?? 15} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_cooldown_minutes: Math.max(1, Math.min(120, Number(e.target.value) || 15)) })} />
+                    <label htmlFor="slack_cooldown">Cooldown (minutes)</label>
+                    <input id="slack_cooldown" type="number" min={1} max={120} value={settingsForm.slack_cooldown_minutes ?? 15} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_cooldown_minutes: Math.max(1, Math.min(120, Number(e.target.value) || 15)) })} />
                   </div>
-                  <label className="settings-enable-alerts" style={{ display: "block", marginTop: "0.5rem" }}>
+                  <div className="settings-form-row">
+                    <label htmlFor="plant_slack_time">Plant of the day Slack time</label>
+                    <input
+                      id="plant_slack_time"
+                      type="time"
+                      value={settingsForm.plant_of_the_day_slack_time ?? "09:35"}
+                      onChange={(e) => setSettingsForm((f) => f && { ...f, plant_of_the_day_slack_time: e.target.value || "09:35" })}
+                    />
+                  </div>
+                  <p className="hint settings-hint">Daily Plant of the day message is sent at this time (device local time).</p>
+                  <label className="settings-enable-alerts settings-check-row">
                     <input type="checkbox" id="slack_runtime_errors" checked={settingsForm.slack_runtime_errors_enabled ?? false} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_runtime_errors_enabled: e.target.checked })} />
                     Notify on server runtime errors
                   </label>
-                  <div style={{ marginTop: "0.75rem" }}>
+                  <div className="settings-form-row">
                     <button type="button" className="schedule-add-btn" onClick={testSlackNotification} disabled={slackTestLoading}>
                       {slackTestLoading ? "Sending…" : "Test Slack notification"}
                     </button>
                     {slackTestResult && (
-                      <p className="hint" style={{ marginTop: "0.5rem", color: slackTestResult.startsWith("Test message") ? "var(--success, green)" : "var(--danger)" }}>
+                      <p className="hint" style={{ marginTop: "0.5rem", marginBottom: 0, color: slackTestResult.startsWith("Test message") ? "var(--success, green)" : "var(--danger)" }}>
                         {slackTestResult}
                       </p>
                     )}

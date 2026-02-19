@@ -81,30 +81,50 @@ header .header-logo {
   height: 6.5rem;
 }
 
-/* Row 2: Lights | Mascot | Pump */
+/* Row 2: Lights | Mascot | Plant of the day | Pump (each column same width as gauge cards) */
 .controls-row {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1.25fr auto 1.25fr;
+  grid-template-columns: repeat(4, 1fr);
   align-items: stretch;
   gap: 1rem;
+  min-height: 14rem;
 }
 
 .controls-row .card {
   min-width: 0;
-  width: 75%;
-  max-width: 31.5rem;
-  justify-self: center;
+  min-height: 12rem;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  justify-content: center;
 }
 
 .controls-row .card .controls {
   align-items: center;
   width: 100%;
+}
+
+.plant-of-the-day-card .plant-of-the-day-thumb {
+  width: 100%;
+  max-width: 120px;
+  height: auto;
+  border-radius: var(--radius);
+  object-fit: cover;
+  margin-bottom: 0.5rem;
+}
+
+.plant-of-the-day-card .plant-of-the-day-name {
+  font-weight: 600;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.plant-detail-modal .plant-detail-grid {
+  font-size: 0.9rem;
 }
 
 .controls-row-mascot {
@@ -1329,6 +1349,46 @@ header .logout-btn:hover {
   width: 5.6rem;
   min-width: 5.6rem;
   max-width: 5.6rem;
+}
+
+/* Slack section: full width of modal */
+.settings-section-slack {
+  grid-column: 1 / -1;
+}
+
+.settings-section-slack .settings-hint {
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.6rem;
+}
+
+.settings-section-slack .settings-check-row {
+  display: block;
+  margin-top: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+/* Match url and time inputs to number styling */
+.settings-modal input[type="url"],
+.settings-modal input[type="time"] {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.settings-modal input[type="time"] {
+  width: 5.6rem;
+  min-width: 5.6rem;
+  max-width: 5.6rem;
+}
+
+.settings-section-slack input[type="url"] {
+  width: 100%;
+  max-width: 24rem;
 }
 
 .settings-form-row {
