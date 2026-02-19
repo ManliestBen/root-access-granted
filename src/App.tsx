@@ -36,6 +36,63 @@ function formatTime12h(hhmm: string | null | undefined): string {
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
+/** Format ISO datetime for "Paused until XX:XX" display (e.g. "2:30 PM"). */
+function formatPausedUntil(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  } catch {
+    return iso;
+  }
+}
+
+function isPausedInFuture(pausedUntil: string | null): boolean {
+  if (!pausedUntil) return false;
+  try {
+    return new Date(pausedUntil) > new Date();
+  } catch {
+    return false;
+  }
+}
+
+/** Current time in Central as "HH:MM" (24h) for rule comparison. */
+function getCurrentCentralHHMM(): string {
+  const s = new Date().toLocaleTimeString("en-CA", { timeZone: CENTRAL_TZ, hour12: false });
+  return s.slice(0, 5);
+}
+
+/** Minutes since midnight for "HH:MM". */
+function hhmmToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.trim().split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/** True if current time (Central) is inside [start, end]. Handles overnight (end < start). */
+function isTimeInRange(now: string, start: string, end: string | null): boolean {
+  if (!end || end === "") return now === start;
+  const nowM = hhmmToMinutes(now);
+  const startM = hhmmToMinutes(start);
+  const endM = hhmmToMinutes(end);
+  if (endM > startM) return nowM >= startM && nowM < endM;
+  return nowM >= startM || nowM < endM;
+}
+
+/** Effective brightness (0–100) that light rules want right now, or null if no active rule. */
+function getEffectiveLightBrightnessFromRules(rules: ScheduleRule[]): number | null {
+  const now = getCurrentCentralHHMM();
+  let maxBrightness: number | null = null;
+  for (const r of rules) {
+    if (r.type !== "light" || r.enabled === false || r.paused) continue;
+    const end = r.end_time ?? null;
+    if (isTimeInRange(now, r.start_time, end)) {
+      const b = r.brightness_pct ?? 0;
+      maxBrightness = maxBrightness == null ? b : Math.max(maxBrightness, b);
+    }
+  }
+  return maxBrightness;
+}
+
 type SensorState = {
   distance: number | null;
   humidity: number | null;
@@ -98,6 +155,24 @@ function App() {
   const [dashboardSettings, setDashboardSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [lightOverrideModal, setLightOverrideModal] = useState<{
+    open: boolean;
+    action: "on" | "off";
+    minutes: string;
+  }>({ open: false, action: "on", minutes: "60" });
+  const [pumpManualModal, setPumpManualModal] = useState<{ open: boolean; minutes: string }>({
+    open: false,
+    minutes: "5",
+  });
+  const [lightRulesPausedUntil, setLightRulesPausedUntil] = useState<string | null>(null);
+  const [pumpRulesPausedUntil, setPumpRulesPausedUntil] = useState<string | null>(null);
+  const [resumeModal, setResumeModal] = useState<{
+    open: boolean;
+    type: "light" | "pump";
+    pausedUntil: string;
+  }>({ open: false, type: "light", pausedUntil: "" });
+  const pendingResumeActionRef = useRef<(() => void) | null>(null);
+
   const [scheduleForm, setScheduleForm] = useState<{
     open: boolean;
     editingId: string | null;
@@ -219,6 +294,11 @@ function App() {
   }, [token]);
 
   const handleLightOn = async () => {
+    const effectiveBrightness = getEffectiveLightBrightnessFromRules(rules);
+    if (effectiveBrightness === 0) {
+      setLightOverrideModal({ open: true, action: "on", minutes: "60" });
+      return;
+    }
     try {
       await api.lightOn();
       await fetchAll();
@@ -228,12 +308,75 @@ function App() {
   };
 
   const handleLightOff = async () => {
+    const rulesWantOn = (getEffectiveLightBrightnessFromRules(rules) ?? 0) > 0;
+    if (rulesWantOn) {
+      setLightOverrideModal({ open: true, action: "off", minutes: "60" });
+      return;
+    }
     try {
       await api.lightOff();
       await fetchAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Light off failed");
     }
+  };
+
+  const confirmLightOverride = async () => {
+    const minutes = Math.max(1, Math.min(1440, parseInt(lightOverrideModal.minutes, 10) || 60));
+    const action = lightOverrideModal.action;
+    setLightOverrideModal((m) => ({ ...m, open: false }));
+    try {
+      await api.pauseLightRulesForMinutes(minutes);
+      await fetchRules();
+      if (action === "on") await api.lightOn();
+      else await api.lightOff();
+      await fetchAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Override failed");
+    }
+  };
+
+  const cancelLightOverride = () => setLightOverrideModal((m) => ({ ...m, open: false }));
+
+  const runOrShowResumeLight = (action: () => void) => {
+    if (isPausedInFuture(lightRulesPausedUntil)) {
+      setResumeModal({ open: true, type: "light", pausedUntil: lightRulesPausedUntil ?? "" });
+      pendingResumeActionRef.current = action;
+    } else {
+      action();
+    }
+  };
+  const runOrShowResumePump = (action: () => void) => {
+    if (isPausedInFuture(pumpRulesPausedUntil)) {
+      setResumeModal({ open: true, type: "pump", pausedUntil: pumpRulesPausedUntil ?? "" });
+      pendingResumeActionRef.current = action;
+    } else {
+      action();
+    }
+  };
+  const confirmResumeModal = async (resume: boolean) => {
+    const type = resumeModal.type;
+    const runPending = () => {
+      const fn = pendingResumeActionRef.current;
+      pendingResumeActionRef.current = null;
+      fn?.();
+    };
+    setResumeModal((m) => ({ ...m, open: false }));
+    if (resume) {
+      try {
+        if (type === "light") await api.resumeLightRules();
+        else await api.resumePumpRules();
+        await fetchRules();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to resume rules");
+        return;
+      }
+    }
+    runPending();
+  };
+  const closeResumeModal = () => {
+    setResumeModal((m) => ({ ...m, open: false }));
+    pendingResumeActionRef.current = null;
   };
 
   const handleLightBrightness = async (value: number) => {
@@ -247,6 +390,10 @@ function App() {
   };
 
   const handlePumpOn = async () => {
+    if ((state.pumpSpeed ?? 0) <= 0) {
+      setPumpManualModal({ open: true, minutes: "5" });
+      return;
+    }
     try {
       await api.setPumpSpeed(100);
       await api.pumpOn();
@@ -256,6 +403,24 @@ function App() {
       setError(e instanceof Error ? e.message : "Pump on failed");
     }
   };
+
+  const confirmPumpManual = async () => {
+    const minutes = Math.max(1, Math.min(120, parseInt(pumpManualModal.minutes, 10) || 5));
+    setPumpManualModal({ open: false, minutes: "5" });
+    try {
+      await api.pausePumpRulesForMinutes(minutes);
+      await api.setManualPumpOffInMinutes(minutes);
+      await fetchRules();
+      await api.setPumpSpeed(100);
+      await api.pumpOn();
+      setPumpSpeedSlider(100);
+      await fetchAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Manual watering failed");
+    }
+  };
+
+  const cancelPumpManual = () => setPumpManualModal({ open: false, minutes: "5" });
 
   const handlePumpOff = async () => {
     try {
@@ -307,8 +472,12 @@ function App() {
     try {
       const res = await api.getRules();
       setRules(res.rules ?? []);
+      setLightRulesPausedUntil(res.light_rules_paused_until ?? null);
+      setPumpRulesPausedUntil(res.pump_rules_paused_until ?? null);
     } catch (e) {
       setRules([]);
+      setLightRulesPausedUntil(null);
+      setPumpRulesPausedUntil(null);
       const msg = e instanceof Error ? e.message : "";
       const isNetwork = msg === "Failed to fetch" || msg.includes("NetworkError") || msg.includes("load failed");
       setRulesError(
@@ -624,21 +793,21 @@ function App() {
         </div>
 
         <div className="controls-row">
-          <div className="card">
+          <div className="card card-control-wrap">
             <h3>Lights</h3>
             <div className="controls">
-              <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div className="controls-on-off-buttons">
                 <button
                   type="button"
-                  className={(state.lightBrightness ?? 0) > 0 ? "btn-on" : "btn-off"}
-                  onClick={handleLightOn}
+                  className={(state.lightBrightness ?? 0) > 0 ? "btn-on" : "btn-on btn--inactive"}
+                  onClick={() => runOrShowResumeLight(handleLightOn)}
                 >
                   On
                 </button>
                 <button
                   type="button"
-                  className={(state.lightBrightness ?? 0) > 0 ? "btn-off" : "btn-on"}
-                  onClick={handleLightOff}
+                  className={(state.lightBrightness ?? 0) > 0 ? "btn-off btn--inactive" : "btn-off"}
+                  onClick={() => runOrShowResumeLight(handleLightOff)}
                 >
                   Off
                 </button>
@@ -649,33 +818,38 @@ function App() {
                   min={0}
                   max={100}
                   value={lightBrightnessSlider}
-                  onChange={(e) => handleLightBrightness(Number(e.target.value))}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    runOrShowResumeLight(() => handleLightBrightness(v));
+                  }}
                 />
                 <span>{lightBrightnessSlider}%</span>
               </div>
-              {state.lightBrightness != null && (
-                <p className="hint">Current: {state.lightBrightness}%</p>
-              )}
             </div>
+            {isPausedInFuture(lightRulesPausedUntil) && lightRulesPausedUntil && (
+              <div className="controls-paused-overlay" aria-live="polite">
+                <span>Paused until {formatPausedUntil(lightRulesPausedUntil)}</span>
+              </div>
+            )}
           </div>
           <div className="controls-row-mascot">
             <img src="/images/mascot.png" alt="" aria-hidden />
           </div>
-          <div className="card">
+          <div className="card card-control-wrap">
             <h3>Pump</h3>
             <div className="controls">
-              <div style={{ display: "flex", gap: "0.5rem" }}>
+              <div className="controls-on-off-buttons">
                 <button
                   type="button"
-                  className={(state.pumpSpeed ?? 0) > 0 ? "btn-on" : "btn-off"}
-                  onClick={handlePumpOn}
+                  className={(state.pumpSpeed ?? 0) > 0 ? "btn-on" : "btn-on btn--inactive"}
+                  onClick={() => runOrShowResumePump(handlePumpOn)}
                 >
                   On
                 </button>
                 <button
                   type="button"
-                  className={(state.pumpSpeed ?? 0) > 0 ? "btn-off" : "btn-on"}
-                  onClick={handlePumpOff}
+                  className={(state.pumpSpeed ?? 0) > 0 ? "btn-off btn--inactive" : "btn-off"}
+                  onClick={() => runOrShowResumePump(handlePumpOff)}
                 >
                   Off
                 </button>
@@ -684,6 +858,11 @@ function App() {
                 <p className="hint">Power: {state.pumpStats.power} W</p>
               )}
             </div>
+            {isPausedInFuture(pumpRulesPausedUntil) && pumpRulesPausedUntil && (
+              <div className="controls-paused-overlay" aria-live="polite">
+                <span>Paused until {formatPausedUntil(pumpRulesPausedUntil)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1023,6 +1202,93 @@ function App() {
           </div>
         </div>
       </div>
+
+      {resumeModal.open && (
+        <div
+          className="modal-overlay"
+          onClick={closeResumeModal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="resume-modal-title"
+        >
+          <div className="override-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 id="resume-modal-title">
+              {resumeModal.type === "light" ? "Light" : "Pump"} rules are paused
+            </h2>
+            <p className="hint" style={{ marginBottom: "1rem" }}>
+              Paused until {formatPausedUntil(resumeModal.pausedUntil)}. Resume rules now?
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+              <button type="button" className="btn-on" onClick={() => confirmResumeModal(true)}>
+                Resume rules
+              </button>
+              <button type="button" className="btn-off" onClick={() => confirmResumeModal(false)}>
+                Keep paused
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lightOverrideModal.open && (
+        <div className="modal-overlay" onClick={cancelLightOverride} role="dialog" aria-modal="true" aria-labelledby="light-override-modal-title">
+          <div className="override-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 id="light-override-modal-title">Override light schedule</h2>
+            <p className="hint" style={{ marginBottom: "1rem" }}>
+              This will override your current light rule. Pause light rules for how many minutes?
+            </p>
+            <div className="schedule-form-row">
+              <label htmlFor="light-override-minutes">Minutes</label>
+              <input
+                id="light-override-minutes"
+                type="number"
+                min={1}
+                max={1440}
+                value={lightOverrideModal.minutes}
+                onChange={(e) => setLightOverrideModal((m) => ({ ...m, minutes: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+              <button type="button" className="btn-on" onClick={confirmLightOverride}>
+                Override for {lightOverrideModal.minutes || "0"} min
+              </button>
+              <button type="button" className="btn-off" onClick={cancelLightOverride}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pumpManualModal.open && (
+        <div className="modal-overlay" onClick={cancelPumpManual} role="dialog" aria-modal="true" aria-labelledby="pump-manual-modal-title">
+          <div className="override-modal" onClick={(e) => e.stopPropagation()}>
+            <h2 id="pump-manual-modal-title">Manual watering</h2>
+            <p className="hint" style={{ marginBottom: "1rem" }}>
+              Pause all pump rules and run the pump for how many minutes?
+            </p>
+            <div className="schedule-form-row">
+              <label htmlFor="pump-manual-minutes">Minutes</label>
+              <input
+                id="pump-manual-minutes"
+                type="number"
+                min={1}
+                max={120}
+                value={pumpManualModal.minutes}
+                onChange={(e) => setPumpManualModal((m) => ({ ...m, minutes: e.target.value }))}
+              />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+              <button type="button" className="btn-on" onClick={confirmPumpManual}>
+                Water for {pumpManualModal.minutes || "0"} min
+              </button>
+              <button type="button" className="btn-off" onClick={cancelPumpManual}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && (
         <div className="modal-overlay" onClick={closeSettingsModal} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">

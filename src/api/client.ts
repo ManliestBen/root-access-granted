@@ -146,9 +146,13 @@ export const api = {
   deleteCameraPhoto: (filename: string) =>
     request<void>(`/camera/photos/${encodeURIComponent(filename)}`, { method: "DELETE" }),
 
-  // Schedule rules
+  // Schedule rules (includes server-side pause-until for overlay)
   getRules: () =>
-    request<{ rules: ScheduleRule[] }>("/schedule/rules"),
+    request<{
+      rules: ScheduleRule[];
+      light_rules_paused_until?: string | null;
+      pump_rules_paused_until?: string | null;
+    }>("/schedule/rules"),
   getRule: (id: string) =>
     request<ScheduleRule>(`/schedule/rules/${id}`),
   createRule: (rule: ScheduleRuleCreate) =>
@@ -163,6 +167,31 @@ export const api = {
     }),
   deleteRule: (id: string) =>
     request<void>(`/schedule/rules/${id}`, { method: "DELETE" }),
+
+  /** Pause all light rules for N minutes (server-side; scheduler skips until then). */
+  pauseLightRulesForMinutes: (minutes: number) =>
+    request<void>("/schedule/rules/pause-light-rules", {
+      method: "POST",
+      body: JSON.stringify({ minutes }),
+    }),
+  /** Pause all pump rules for N minutes (server-side). */
+  pausePumpRulesForMinutes: (minutes: number) =>
+    request<void>("/schedule/rules/pause-pump-rules", {
+      method: "POST",
+      body: JSON.stringify({ minutes }),
+    }),
+  /** Schedule pump to turn off in N minutes (scheduler turns it off). */
+  setManualPumpOffInMinutes: (minutes: number) =>
+    request<void>("/schedule/rules/manual-pump-off", {
+      method: "POST",
+      body: JSON.stringify({ minutes }),
+    }),
+  /** Clear light rules pause (resume rules now). */
+  resumeLightRules: () =>
+    request<void>("/schedule/rules/resume-light-rules", { method: "POST" }),
+  /** Clear pump rules pause (resume rules now). */
+  resumePumpRules: () =>
+    request<void>("/schedule/rules/resume-pump-rules", { method: "POST" }),
 
   // App settings (gauge/alert thresholds and alert toggles)
   getSettings: () => request<AppSettings>("/settings"),
