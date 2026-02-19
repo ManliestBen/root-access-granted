@@ -154,6 +154,8 @@ function App() {
   const [dashboardSettings, setDashboardSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [slackTestLoading, setSlackTestLoading] = useState(false);
+  const [slackTestResult, setSlackTestResult] = useState<string | null>(null);
   const [lightOverrideModal, setLightOverrideModal] = useState<{
     open: boolean;
     action: "on" | "off";
@@ -562,6 +564,21 @@ function App() {
     setSettingsOpen(false);
     setSettingsForm(null);
     setSettingsError(null);
+    setSlackTestResult(null);
+  };
+
+  const testSlackNotification = async () => {
+    setSlackTestResult(null);
+    setSlackTestLoading(true);
+    try {
+      await api.testSlack(settingsForm?.slack_webhook_url ?? undefined);
+      setSlackTestResult("Test message sent to Slack.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Test failed";
+      setSlackTestResult(msg.replace(/^API \d+: /, "").trim() || "Test failed");
+    } finally {
+      setSlackTestLoading(false);
+    }
   };
 
   const saveSettings = async () => {
@@ -1437,6 +1454,38 @@ function App() {
                   <div className="settings-form-row">
                     <label>High alert</label>
                     <input type="number" step="any" value={settingsForm.pcb_temp_alert_threshold} onChange={(e) => setSettingsForm((f) => f && { ...f, pcb_temp_alert_threshold: Number(e.target.value) || 0 })} />
+                  </div>
+                </section>
+                <section className="settings-section">
+                  <div className="settings-section-header">
+                    <h4>Slack notifications</h4>
+                    <label className="settings-enable-alerts">
+                      <input type="checkbox" id="slack_enabled" checked={settingsForm.slack_notifications_enabled ?? true} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_notifications_enabled: e.target.checked })} />
+                      Enable Slack notifications
+                    </label>
+                  </div>
+                  <div className="settings-form-row">
+                    <label>Webhook URL</label>
+                    <input type="url" placeholder="Leave blank to use server env" value={settingsForm.slack_webhook_url ?? ""} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_webhook_url: e.target.value.trim() || null })} />
+                  </div>
+                  <p className="hint" style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Override SLACK_WEBHOOK_URL. Blank = use server environment.</p>
+                  <div className="settings-form-row">
+                    <label>Cooldown (minutes)</label>
+                    <input type="number" min={1} max={120} value={settingsForm.slack_cooldown_minutes ?? 15} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_cooldown_minutes: Math.max(1, Math.min(120, Number(e.target.value) || 15)) })} />
+                  </div>
+                  <label className="settings-enable-alerts" style={{ display: "block", marginTop: "0.5rem" }}>
+                    <input type="checkbox" id="slack_runtime_errors" checked={settingsForm.slack_runtime_errors_enabled ?? false} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_runtime_errors_enabled: e.target.checked })} />
+                    Notify on server runtime errors
+                  </label>
+                  <div style={{ marginTop: "0.75rem" }}>
+                    <button type="button" className="schedule-add-btn" onClick={testSlackNotification} disabled={slackTestLoading}>
+                      {slackTestLoading ? "Sending…" : "Test Slack notification"}
+                    </button>
+                    {slackTestResult && (
+                      <p className="hint" style={{ marginTop: "0.5rem", color: slackTestResult.startsWith("Test message") ? "var(--success, green)" : "var(--danger)" }}>
+                        {slackTestResult}
+                      </p>
+                    )}
                   </div>
                 </section>
                 </div>
