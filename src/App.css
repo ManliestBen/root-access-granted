@@ -189,6 +189,81 @@ header .header-logo {
   gap: 0.5rem;
 }
 
+/* Plant detail modal: mobile / small screens — no horizontal overflow */
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .settings-modal.plant-detail-modal {
+    width: 100%;
+    max-width: none;
+    min-height: auto;
+    max-height: calc(100vh - 1rem);
+    padding: 1rem 1rem 1.25rem;
+    overflow-x: hidden;
+  }
+
+  .plant-detail-modal h2 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    padding: 0 0.25rem;
+  }
+
+  .plant-detail-modal .plant-detail-subtitle {
+    font-size: 0.85rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    padding: 0 0.25rem;
+  }
+
+  .plant-detail-modal .plant-detail-image-wrap {
+    margin: 0.25rem -0.5rem 0.75rem;
+  }
+
+  .plant-detail-modal .plant-detail-image {
+    max-width: 100%;
+  }
+
+  .plant-detail-modal .plant-detail-content {
+    min-width: 0;
+  }
+
+  .plant-detail-modal .plant-detail-description {
+    font-size: 0.9rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .plant-detail-modal .plant-detail-grid {
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: none;
+    margin-bottom: 0.75rem;
+  }
+
+  .plant-detail-modal .plant-detail-grid-col {
+    flex: none;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+  }
+
+  .plant-detail-modal .plant-detail-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .plant-detail-modal .plant-detail-actions .schedule-add-btn,
+  .plant-detail-modal .plant-detail-actions .schedule-cancel-btn {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
 .controls-row-mascot {
   display: flex;
   align-items: center;

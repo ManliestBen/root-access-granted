@@ -213,6 +213,7 @@ function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyMetrics, setHistoryMetrics] = useState<Set<string>>(new Set(["water_level", "humidity"]));
   const [historyRange, setHistoryRange] = useState<HistoryRange>("week");
+  const [historyShowPumpEvents, setHistoryShowPumpEvents] = useState(true);
   const [historyData, setHistoryData] = useState<HistoryReadingPoint[]>([]);
   const [historyPumpEvents, setHistoryPumpEvents] = useState<PumpEventRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1547,7 +1548,7 @@ function App() {
           <div className="settings-modal history-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", width: "800px" }}>
             <h2 id="history-modal-title">History</h2>
             <p className="hint" style={{ marginBottom: "0.75rem", fontSize: "0.8rem" }}>
-              Select metrics and time range. Sensor data is recorded every 5 minutes. Pump on/off events are shown as vertical lines.
+              Select metrics and time range. Sensor data is recorded every 5 minutes.
             </p>
             <div className="schedule-form">
               <div className="schedule-form-row">
@@ -1563,6 +1564,15 @@ function App() {
                       {label}
                     </label>
                   ))}
+                  <label className="schedule-form-check">
+                    <input
+                      type="checkbox"
+                      checked={historyShowPumpEvents}
+                      onChange={(e) => setHistoryShowPumpEvents(e.target.checked)}
+                      aria-label="Pump events"
+                    />
+                    Pump events
+                  </label>
                 </div>
               </div>
               <div className="schedule-form-row">
@@ -1581,39 +1591,79 @@ function App() {
             </div>
             {historyLoading && <p className="loading">Loading history…</p>}
             {historyError && <p className="hint" style={{ color: "var(--danger)", marginBottom: "1rem" }}>{historyError}</p>}
-            {!historyLoading && !historyError && historyData.length > 0 && (
+            {!historyLoading && !historyError && historyData.length > 0 && (() => {
+              const chartData = historyData.map((p) => ({
+                ...p,
+                created_at_ts: new Date(p.created_at).getTime(),
+                air_temp: p.air_temp != null ? celsiusToF(p.air_temp) : undefined,
+                pcb_temp: p.pcb_temp != null ? celsiusToF(p.pcb_temp) : undefined,
+              }));
+              const pumpTimestamps = historyPumpEvents.map((e) => new Date(e.created_at).getTime());
+              const dataMin = chartData.length ? Math.min(...chartData.map((d) => d.created_at_ts)) : 0;
+              const dataMax = chartData.length ? Math.max(...chartData.map((d) => d.created_at_ts)) : 0;
+              const xMin = Math.min(dataMin, ...pumpTimestamps);
+              const xMax = Math.max(dataMax, ...pumpTimestamps);
+              const xDomain = chartData.length ? [xMin, xMax] : undefined;
+              const formatXTick = (ts: number) => {
+                try {
+                  const d = new Date(ts);
+                  if (historyRange === "day") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+                  if (historyRange === "week" || historyRange === "month") return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+                  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                } catch {
+                  return String(ts);
+                }
+              };
+              const pumpLegendPayload = historyShowPumpEvents
+                ? [
+                    { value: "Pump on", color: "var(--success, #22c55e)" },
+                    { value: "Pump off", color: "var(--danger, #ef4444)" },
+                  ]
+                : [];
+              return (
               <div style={{ width: "100%", height: "320px", marginBottom: "1rem" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
-                    data={historyData.map((p) => ({
-                      ...p,
-                      air_temp: p.air_temp != null ? celsiusToF(p.air_temp) : undefined,
-                      pcb_temp: p.pcb_temp != null ? celsiusToF(p.pcb_temp) : undefined,
-                    }))}
+                    data={chartData}
                     margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #333)" />
                     <XAxis
-                      dataKey="created_at"
+                      dataKey="created_at_ts"
+                      type="number"
+                      domain={xDomain}
                       tick={{ fontSize: 10, fill: "var(--text-muted, #888)" }}
-                      tickFormatter={(v) => {
-                        try {
-                          const d = new Date(v);
-                          if (historyRange === "day") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-                          if (historyRange === "week" || historyRange === "month") return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-                          return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-                        } catch {
-                          return v;
-                        }
-                      }}
+                      tickFormatter={formatXTick}
                     />
                     <YAxis tick={{ fontSize: 10, fill: "var(--text-muted, #888)" }} />
                     <Tooltip
                       contentStyle={{ background: "var(--card-bg, #1a1a1a)", border: "1px solid var(--border, #333)" }}
                       labelStyle={{ color: "var(--text-muted)" }}
-                      labelFormatter={(v) => new Date(v).toLocaleString()}
+                      labelFormatter={(v) => new Date(Number(v)).toLocaleString()}
                     />
-                    <Legend />
+                    <Legend
+                      content={({ payload = [] }) => {
+                        const items = [...payload, ...pumpLegendPayload];
+                        const isPumpEntry = (entry: { value?: string }) =>
+                          entry.value === "Pump on" || entry.value === "Pump off";
+                        return (
+                          <ul style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem 1rem", justifyContent: "center", margin: 0, padding: 0, listStyle: "none", fontSize: "0.75rem" }}>
+                            {items.map((entry, i) => (
+                              <li key={i} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                                {isPumpEntry(entry) ? (
+                                  <svg width={14} height={6} style={{ overflow: "visible" }}>
+                                    <line x1={0} y1={3} x2={14} y2={3} stroke={entry.color} strokeWidth={2} strokeDasharray="2 2" />
+                                  </svg>
+                                ) : (
+                                  <span style={{ display: "inline-block", width: 14, height: 3, backgroundColor: entry.color, borderRadius: 1 }} />
+                                )}
+                                <span style={{ color: "var(--text-muted, #888)" }}>{entry.value}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }}
+                    />
                     {Array.from(historyMetrics).map((metric) => (
                       <Line
                         key={metric}
@@ -1626,30 +1676,33 @@ function App() {
                         connectNulls
                       />
                     ))}
-                    {historyPumpEvents
-                      .filter((e) => e.is_on)
-                      .map((evt, i) => (
-                        <ReferenceLine
-                          key={`on-${i}-${evt.created_at}`}
-                          x={evt.created_at}
-                          stroke="var(--success, #22c55e)"
-                          strokeDasharray="2 2"
-                        />
-                      ))}
-                    {historyPumpEvents
-                      .filter((e) => !e.is_on)
-                      .map((evt, i) => (
-                        <ReferenceLine
-                          key={`off-${i}-${evt.created_at}`}
-                          x={evt.created_at}
-                          stroke="var(--danger, #ef4444)"
-                          strokeDasharray="2 2"
-                        />
-                      ))}
+                    {historyShowPumpEvents &&
+                      historyPumpEvents
+                        .filter((e) => e.is_on)
+                        .map((evt, i) => (
+                          <ReferenceLine
+                            key={`on-${i}-${evt.created_at}`}
+                            x={new Date(evt.created_at).getTime()}
+                            stroke="var(--success, #22c55e)"
+                            strokeDasharray="2 2"
+                          />
+                        ))}
+                    {historyShowPumpEvents &&
+                      historyPumpEvents
+                        .filter((e) => !e.is_on)
+                        .map((evt, i) => (
+                          <ReferenceLine
+                            key={`off-${i}-${evt.created_at}`}
+                            x={new Date(evt.created_at).getTime()}
+                            stroke="var(--danger, #ef4444)"
+                            strokeDasharray="2 2"
+                          />
+                        ))}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            )}
+            );
+            })()}
             {!historyLoading && !historyError && historyData.length === 0 && historyMetrics.size > 0 && (
               <p className="hint">No data for the selected range. Data is recorded every 5 minutes.</p>
             )}
