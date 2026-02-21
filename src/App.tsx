@@ -188,6 +188,10 @@ function App() {
   const [dashboardSettings, setDashboardSettings] = useState<AppSettings | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{ available: boolean; created_at?: string; last_incremental_at?: string; message?: string } | null>(null);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [backupRestoreLoading, setBackupRestoreLoading] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [slackTestLoading, setSlackTestLoading] = useState(false);
   const [slackTestResult, setSlackTestResult] = useState<string | null>(null);
   const [plantOfTheDay, setPlantOfTheDay] = useState<PlantOfTheDay | null>(null);
@@ -645,6 +649,7 @@ function App() {
   const openSettingsModal = async () => {
     setSettingsOpen(true);
     setSettingsError(null);
+    setBackupMessage(null);
     setSettingsLoading(true);
     try {
       const data = await api.getSettings();
@@ -654,6 +659,7 @@ function App() {
     } finally {
       setSettingsLoading(false);
     }
+    api.getBackupStatus().then(setBackupStatus).catch(() => setBackupStatus(null));
   };
 
   const closeSettingsModal = () => {
@@ -661,6 +667,36 @@ function App() {
     setSettingsForm(null);
     setSettingsError(null);
     setSlackTestResult(null);
+    setBackupMessage(null);
+  };
+
+  const runBackup = async () => {
+    setBackupMessage(null);
+    setBackupRunning(true);
+    try {
+      const res = await api.backupRun();
+      setBackupMessage(res.success ? (res.audit?.ok ? "Backup completed. All records match." : res.message) : res.message);
+      if (res.success) api.getBackupStatus().then(setBackupStatus).catch(() => {});
+    } catch (e) {
+      setBackupMessage(e instanceof Error ? e.message : "Backup failed");
+    } finally {
+      setBackupRunning(false);
+    }
+  };
+
+  const runRestore = async () => {
+    if (!window.confirm("Restore will overwrite all local data with the backup from MongoDB. Continue?")) return;
+    setBackupMessage(null);
+    setBackupRestoreLoading(true);
+    try {
+      const res = await api.backupRestore();
+      setBackupMessage(res.success ? "Restore completed. You may need to refresh." : res.message);
+      if (res.success) closeSettingsModal();
+    } catch (e) {
+      setBackupMessage(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setBackupRestoreLoading(false);
+    }
   };
 
   const testSlackNotification = async () => {
@@ -1872,6 +1908,26 @@ function App() {
                       </p>
                     )}
                   </div>
+                </section>
+                <section className="settings-section settings-section-slack">
+                  <h4>Backup &amp; Restore</h4>
+                  <p className="hint settings-hint">Back up SQLite data, settings, and auth to MongoDB. Restore overwrites local data. Daily incremental backup runs at 3 AM.</p>
+                  {backupStatus?.available && backupStatus.created_at && (
+                    <p className="hint" style={{ marginBottom: "0.5rem" }}>Last backup: {new Date(backupStatus.created_at).toLocaleString()}</p>
+                  )}
+                  <div className="settings-form-row" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <button type="button" className="schedule-add-btn" onClick={runBackup} disabled={backupRunning}>
+                      {backupRunning ? "Backing up…" : "Backup to MongoDB"}
+                    </button>
+                    <button type="button" className="schedule-cancel-btn" onClick={runRestore} disabled={backupRestoreLoading}>
+                      {backupRestoreLoading ? "Restoring…" : "Restore from MongoDB"}
+                    </button>
+                  </div>
+                  {backupMessage && (
+                    <p className="hint" style={{ marginTop: "0.5rem", marginBottom: 0, color: backupMessage.startsWith("Backup completed") || backupMessage.startsWith("Restore completed") ? "var(--success, green)" : "var(--danger)" }}>
+                      {backupMessage}
+                    </p>
+                  )}
                 </section>
                 </div>
                 <div className="settings-form-actions">

@@ -226,6 +226,24 @@ export const api = {
     request<{ events: PumpEventRecord[] }>(
       `/history/pump-events?range=${encodeURIComponent(range)}`
     ),
+
+  /** Backup: run full backup to MongoDB (with audit). */
+  backupRun: () =>
+    request<{ success: boolean; message: string; created_at?: string; audit?: { ok: boolean; message: string; details: Record<string, unknown> } }>(
+      "/backup/run",
+      { method: "POST" }
+    ),
+  /** Backup: restore from MongoDB (overwrites local DB and files). */
+  backupRestore: () =>
+    request<{ success: boolean; message: string; backup_created_at?: string }>(
+      "/backup/restore",
+      { method: "POST" }
+    ),
+  /** Backup: get status (last backup time). */
+  getBackupStatus: () =>
+    request<{ available: boolean; created_at?: string; last_incremental_at?: string; message?: string }>(
+      "/backup/status"
+    ),
 };
 
 export type HistoryRange = "day" | "week" | "month" | "year";
