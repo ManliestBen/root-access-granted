@@ -759,11 +759,6 @@ function App() {
     setSowDatesError(null);
   };
 
-  const cancelEditSowDate = () => {
-    setSowDatesEditingId(null);
-    setSowDatesError(null);
-  };
-
   const saveEditSowDate = async () => {
     if (sowDatesEditingId == null) return;
     const plant_name = sowDatesEditPlantName.trim();
