@@ -11,6 +11,7 @@ import {
   type HistoryRange,
   type HistoryReadingPoint,
   type PumpEventRecord,
+  type SowDateEntry,
 } from "./api/client";
 import LoginView from "./LoginView";
 import AuthImg from "./AuthImg";
@@ -59,6 +60,32 @@ function formatTimeCentralShort(date: Date): string {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+/** Format sow date string (YYYY-MM-DD) as MM/DD. */
+function formatSowDateMMDD(sowDateStr: string): string {
+  const s = sowDateStr.slice(0, 10);
+  const parts = s.split("-");
+  if (parts.length < 3) return s;
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (Number.isNaN(m) || Number.isNaN(d)) return s;
+  return `${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}`;
+}
+
+/** Days since sow date for display (e.g. "Today", "1 day", "14 days"). */
+function formatDaysSinceSowDate(sowDateStr: string): string {
+  const s = sowDateStr.slice(0, 10);
+  const sown = new Date(s + "T12:00:00");
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  sown.setHours(12, 0, 0, 0);
+  const diffMs = today.getTime() - sown.getTime();
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (days < 0) return "Future";
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day";
+  return `${days} days`;
 }
 
 /** Format stored "HH:MM" (24h) as 12h for display (e.g. "09:00" -> "9:00 AM"). */
@@ -192,6 +219,15 @@ function App() {
   const [backupRunning, setBackupRunning] = useState(false);
   const [backupRestoreLoading, setBackupRestoreLoading] = useState(false);
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [sowDatesOpen, setSowDatesOpen] = useState(false);
+  const [sowDatesList, setSowDatesList] = useState<SowDateEntry[]>([]);
+  const [sowDatesError, setSowDatesError] = useState<string | null>(null);
+  const [sowDatesLoading, setSowDatesLoading] = useState(false);
+  const [sowDatesNewPlantName, setSowDatesNewPlantName] = useState("");
+  const [sowDatesNewSowDate, setSowDatesNewSowDate] = useState("");
+  const [sowDatesEditingId, setSowDatesEditingId] = useState<number | null>(null);
+  const [sowDatesEditPlantName, setSowDatesEditPlantName] = useState("");
+  const [sowDatesEditSowDate, setSowDatesEditSowDate] = useState("");
   const [slackTestLoading, setSlackTestLoading] = useState(false);
   const [slackTestResult, setSlackTestResult] = useState<string | null>(null);
   const [plantOfTheDay, setPlantOfTheDay] = useState<PlantOfTheDay | null>(null);
@@ -670,6 +706,94 @@ function App() {
     setBackupMessage(null);
   };
 
+  const openSowDatesModal = async () => {
+    setSowDatesOpen(true);
+    setSowDatesError(null);
+    setSowDatesEditingId(null);
+    setSowDatesLoading(true);
+    try {
+      const list = await api.getSowDates();
+      setSowDatesList(list);
+      const today = new Date().toISOString().slice(0, 10);
+      setSowDatesNewSowDate(today);
+      setSowDatesNewPlantName("");
+    } catch (e) {
+      setSowDatesError(e instanceof Error ? e.message : "Failed to load sow dates");
+    } finally {
+      setSowDatesLoading(false);
+    }
+  };
+
+  const closeSowDatesModal = () => {
+    setSowDatesOpen(false);
+    setSowDatesList([]);
+    setSowDatesError(null);
+    setSowDatesEditingId(null);
+  };
+
+  const addSowDate = async () => {
+    const plant_name = sowDatesNewPlantName.trim();
+    if (!plant_name) {
+      setSowDatesError("Enter a plant name");
+      return;
+    }
+    if (!sowDatesNewSowDate) {
+      setSowDatesError("Select a date");
+      return;
+    }
+    setSowDatesError(null);
+    try {
+      const created = await api.createSowDate({ plant_name, sow_date: sowDatesNewSowDate });
+      setSowDatesList((prev) => [created, ...prev]);
+      setSowDatesNewPlantName("");
+      setSowDatesNewSowDate(new Date().toISOString().slice(0, 10));
+    } catch (e) {
+      setSowDatesError(e instanceof Error ? e.message : "Failed to add");
+    }
+  };
+
+  const startEditSowDate = (entry: SowDateEntry) => {
+    setSowDatesEditingId(entry.id);
+    setSowDatesEditPlantName(entry.plant_name);
+    setSowDatesEditSowDate(entry.sow_date.slice(0, 10));
+    setSowDatesError(null);
+  };
+
+  const saveEditSowDate = async () => {
+    if (sowDatesEditingId == null) return;
+    const plant_name = sowDatesEditPlantName.trim();
+    if (!plant_name) {
+      setSowDatesError("Plant name cannot be empty");
+      return;
+    }
+    if (!sowDatesEditSowDate) {
+      setSowDatesError("Select a date");
+      return;
+    }
+    setSowDatesError(null);
+    try {
+      const updated = await api.updateSowDate(sowDatesEditingId, {
+        plant_name,
+        sow_date: sowDatesEditSowDate,
+      });
+      setSowDatesList((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      setSowDatesEditingId(null);
+    } catch (e) {
+      setSowDatesError(e instanceof Error ? e.message : "Failed to update");
+    }
+  };
+
+  const removeSowDate = async (id: number) => {
+    if (!window.confirm("Remove this sow date entry?")) return;
+    try {
+      await api.deleteSowDate(id);
+      setSowDatesList((prev) => prev.filter((e) => e.id !== id));
+      setSowDatesError(null);
+    } catch (e) {
+      setSowDatesError(e instanceof Error ? e.message : "Failed to remove");
+    }
+  };
+
   const runBackup = async () => {
     setBackupMessage(null);
     setBackupRunning(true);
@@ -870,6 +994,9 @@ function App() {
         </button>
         <button type="button" onClick={openSettingsModal}>
           Settings
+        </button>
+        <button type="button" onClick={openSowDatesModal}>
+          Sow Dates
         </button>
         {lastUpdate && (
           <span className="last-update">
@@ -1936,6 +2063,117 @@ function App() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {sowDatesOpen && (
+        <div className="modal-overlay" onClick={closeSowDatesModal} role="dialog" aria-modal="true" aria-labelledby="sow-dates-modal-title">
+          <div className="settings-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "480px" }}>
+            <h2 id="sow-dates-modal-title">Sow Dates</h2>
+            <p className="hint" style={{ marginBottom: "1rem", fontSize: "0.8rem" }}>
+              Track when you planted each crop. Data is stored in the app and included in backups.
+            </p>
+            {sowDatesError && (
+              <p className="hint" style={{ color: "var(--danger)", marginBottom: "0.75rem" }}>{sowDatesError}</p>
+            )}
+            <div className="settings-form">
+              <div className="settings-form-row" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div className="settings-field" style={{ flex: "1 1 10rem", minWidth: 0 }}>
+                  <label htmlFor="sow-dates-plant-name">Plant name</label>
+                  <input
+                    id="sow-dates-plant-name"
+                    type="text"
+                    placeholder="e.g. Basil"
+                    value={sowDatesNewPlantName}
+                    onChange={(e) => setSowDatesNewPlantName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addSowDate()}
+                  />
+                </div>
+                <div className="settings-field" style={{ flex: "0 0 auto" }}>
+                  <label htmlFor="sow-dates-plant-date">Date planted</label>
+                  <input
+                    id="sow-dates-plant-date"
+                    type="date"
+                    value={sowDatesNewSowDate}
+                    onChange={(e) => setSowDatesNewSowDate(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addSowDate()}
+                  />
+                </div>
+                <button type="button" className="schedule-add-btn" onClick={addSowDate}>
+                  Add
+                </button>
+              </div>
+              {sowDatesLoading && <p className="loading">Loading…</p>}
+              {!sowDatesLoading && sowDatesList.length === 0 && (
+                <p className="hint" style={{ marginTop: "1rem" }}>No entries yet. Add a plant and date above.</p>
+              )}
+              {!sowDatesLoading && sowDatesList.length > 0 && (
+                <ul className="sow-dates-list" style={{ listStyle: "none", padding: 0, marginTop: "1rem", marginBottom: 0 }}>
+                  {sowDatesList.map((entry) => (
+                    <li key={entry.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0", borderBottom: "1px solid var(--border, #eee)" }}>
+                      {sowDatesEditingId === entry.id ? (
+                        <>
+                          <span style={{ width: "10rem", flexShrink: 0 }}>
+                            <input
+                              type="text"
+                              value={sowDatesEditPlantName}
+                              onChange={(e) => setSowDatesEditPlantName(e.target.value)}
+                              style={{ width: "100%", minWidth: 0 }}
+                            />
+                          </span>
+                          <span style={{ width: "10rem", flexShrink: 0 }}>
+                            <input
+                              type="date"
+                              value={sowDatesEditSowDate}
+                              onChange={(e) => setSowDatesEditSowDate(e.target.value)}
+                              style={{ width: "100%" }}
+                            />
+                          </span>
+                          <span style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+                            <button type="button" className="schedule-save-btn" style={{ padding: "0.35rem", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={saveEditSowDate} title="Save" aria-label="Save">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                <polyline points="17 21 17 13 7 13 7 21" />
+                                <polyline points="7 3 7 8 15 8" />
+                              </svg>
+                            </button>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ width: "10rem", flexShrink: 0, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.plant_name}>
+                            {entry.plant_name}
+                          </span>
+                          <span style={{ width: "10rem", flexShrink: 0, color: "var(--text-muted)", whiteSpace: "nowrap", fontSize: "0.9rem" }} title={entry.sow_date.slice(0, 10)}>
+                            {formatSowDateMMDD(entry.sow_date)} ({formatDaysSinceSowDate(entry.sow_date)})
+                          </span>
+                          <span style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+                            <button type="button" className="schedule-add-btn" style={{ padding: "0.35rem", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => startEditSowDate(entry)} title="Edit" aria-label="Edit">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                            </button>
+                            <button type="button" className="schedule-cancel-btn" style={{ padding: "0.35rem", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => removeSowDate(entry.id)} title="Remove" aria-label="Remove">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                <line x1="10" y1="11" x2="10" y2="17" />
+                                <line x1="14" y1="11" x2="14" y2="17" />
+                              </svg>
+                            </button>
+                          </span>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="settings-form-actions" style={{ marginTop: "1rem" }}>
+              <button type="button" className="schedule-cancel-btn" onClick={closeSowDatesModal}>Close</button>
+            </div>
           </div>
         </div>
       )}

@@ -244,6 +244,28 @@ export const api = {
     request<{ available: boolean; created_at?: string; last_incremental_at?: string; message?: string }>(
       "/backup/status"
     ),
+
+  /** Sow dates: plant name + date planted */
+  getSowDates: () => request<SowDateEntry[]>("/sow-dates"),
+  createSowDate: (payload: { plant_name: string; sow_date: string }) =>
+    request<SowDateEntry>("/sow-dates", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateSowDate: (id: number, payload: { plant_name?: string; sow_date?: string }) =>
+    request<SowDateEntry>(`/sow-dates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteSowDate: (id: number) =>
+    request<void>(`/sow-dates/${id}`, { method: "DELETE" }),
+};
+
+export type SowDateEntry = {
+  id: number;
+  plant_name: string;
+  sow_date: string;
+  created_at: string;
 };
 
 export type HistoryRange = "day" | "week" | "month" | "year";
