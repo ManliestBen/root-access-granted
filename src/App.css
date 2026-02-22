@@ -1512,9 +1512,11 @@ header .logout-btn:hover {
   margin-bottom: 0.6rem;
 }
 
-/* Match url and time inputs to number styling */
+/* Match url, time, text, and date inputs to number styling */
 .settings-modal input[type="url"],
-.settings-modal input[type="time"] {
+.settings-modal input[type="time"],
+.settings-modal input[type="text"],
+.settings-modal input[type="date"] {
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1522,6 +1524,24 @@ header .logout-btn:hover {
   color: var(--text);
   font-size: 0.9rem;
   box-sizing: border-box;
+}
+
+.settings-modal input[type="text"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-modal input[type="date"] {
+  width: 10rem;
+  min-width: 10rem;
+  accent-color: var(--accent);
+}
+
+/* Green calendar icon in all date inputs to match app buttons */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) sepia(1) saturate(5) hue-rotate(70deg) brightness(1.1);
+  cursor: pointer;
+  opacity: 0.9;
 }
 
 .settings-modal input[type="time"] {
