@@ -94,6 +94,7 @@ export type AppSettings = {
   slack_cooldown_minutes: number;
   slack_notifications_enabled: boolean;
   slack_runtime_errors_enabled: boolean;
+  plant_of_the_day_slack_enabled: boolean;
   plant_of_the_day_slack_time: string;
 };
 
