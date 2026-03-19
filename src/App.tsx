@@ -2022,6 +2022,15 @@ function App() {
                   </div>
                   <p className="hint settings-hint">Daily Plant of the day message is sent at this time (device local time).</p>
                   <label className="settings-enable-alerts settings-check-row">
+                    <input
+                      type="checkbox"
+                      id="plant_slack_enabled"
+                      checked={settingsForm.plant_of_the_day_slack_enabled ?? true}
+                      onChange={(e) => setSettingsForm((f) => f && { ...f, plant_of_the_day_slack_enabled: e.target.checked })}
+                    />
+                    Enable plant of the day Slack notifications
+                  </label>
+                  <label className="settings-enable-alerts settings-check-row">
                     <input type="checkbox" id="slack_runtime_errors" checked={settingsForm.slack_runtime_errors_enabled ?? false} onChange={(e) => setSettingsForm((f) => f && { ...f, slack_runtime_errors_enabled: e.target.checked })} />
                     Notify on server runtime errors
                   </label>
